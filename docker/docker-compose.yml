@@ -1,0 +1,27 @@
+services:
+  groceries-app:
+    image: ghcr.io/kleyson/groceries:latest
+    container_name: appz-groceries
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      - PORT=8080
+      - DATABASE_PATH=/data/groceries.db
+      - SECURE_COOKIE=${SECURE_COOKIE:-true}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+    volumes:
+      - groceries-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "wtf.appz.groceries.description=Appz Groceries - Grocery List Management"
+      - "wtf.appz.groceries.version=0.1.0"
+
+volumes:
+  groceries-data:
+    driver: local

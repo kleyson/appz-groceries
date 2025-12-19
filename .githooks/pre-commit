@@ -1,0 +1,40 @@
+#!/bin/sh
+
+# Simple pre-commit hook for linting and formatting
+# This runs on staged TypeScript/TSX files in the mobile directory
+
+# Get staged .ts and .tsx files in mobile directory
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^mobile/.*\.(ts|tsx)$')
+
+if [ -z "$STAGED_FILES" ]; then
+  exit 0
+fi
+
+# Change to mobile directory
+cd mobile || exit 1
+
+# Remove 'mobile/' prefix from paths
+FILES=$(echo "$STAGED_FILES" | sed 's|^mobile/||')
+
+# Run eslint --fix on the files
+echo "Running ESLint..."
+for file in $FILES; do
+  if [ -f "$file" ]; then
+    npm run lint:fix -- "$file" 2>/dev/null || npm run lint -- "$file"
+  fi
+done
+
+# Run prettier on the files
+echo "Running Prettier..."
+for file in $FILES; do
+  if [ -f "$file" ]; then
+    npx prettier --write "$file" 2>/dev/null
+  fi
+done
+
+# Go back to repo root and add the fixed files
+cd ..
+echo "$STAGED_FILES" | xargs git add
+
+exit 0
+

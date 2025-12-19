@@ -1,0 +1,157 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply scroll-smooth antialiased;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100;
+    @apply min-h-screen;
+  }
+
+  /* Focus visible styles */
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary-500 ring-offset-2 ring-offset-white dark:ring-offset-slate-900;
+  }
+}
+
+@layer components {
+  /* Glass card effect */
+  .glass-card {
+    @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl;
+    @apply border border-slate-200/50 dark:border-slate-700/50;
+    @apply shadow-glass;
+  }
+
+  /* Button base styles */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2;
+    @apply font-medium transition-all duration-150;
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply active:scale-[0.98];
+  }
+
+  .btn-primary {
+    @apply btn bg-gradient-to-r from-primary-500 to-primary-600;
+    @apply text-white shadow-md hover:shadow-lg;
+    @apply focus-visible:ring-primary-500;
+  }
+
+  .btn-secondary {
+    @apply btn bg-slate-100 dark:bg-slate-800;
+    @apply text-slate-700 dark:text-slate-200;
+    @apply hover:bg-slate-200 dark:hover:bg-slate-700;
+    @apply focus-visible:ring-slate-500;
+  }
+
+  .btn-danger {
+    @apply btn bg-gradient-to-r from-red-500 to-red-600;
+    @apply text-white shadow-md hover:shadow-lg;
+    @apply focus-visible:ring-red-500;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent;
+    @apply text-slate-600 dark:text-slate-400;
+    @apply hover:bg-slate-100 dark:hover:bg-slate-800;
+    @apply focus-visible:ring-slate-500;
+  }
+
+  /* Input styles */
+  .input {
+    @apply w-full px-4 py-2.5 rounded-lg;
+    @apply bg-white dark:bg-slate-800;
+    @apply border border-slate-200 dark:border-slate-700;
+    @apply text-slate-900 dark:text-slate-100;
+    @apply placeholder:text-slate-400 dark:placeholder:text-slate-500;
+    @apply focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20;
+    @apply transition-colors duration-150;
+  }
+
+  .input-error {
+    @apply border-red-500 focus:border-red-500 focus:ring-red-500/20;
+  }
+
+  /* Card styles */
+  .card {
+    @apply bg-white dark:bg-slate-900;
+    @apply border border-slate-200 dark:border-slate-800;
+    @apply rounded-xl shadow-card;
+  }
+
+  .card-hover {
+    @apply hover:shadow-card-hover hover:border-slate-300 dark:hover:border-slate-700;
+    @apply transition-all duration-200;
+  }
+
+  /* Badge styles */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5;
+    @apply text-xs font-medium rounded-full;
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    @apply h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden;
+  }
+
+  .progress-bar-fill {
+    @apply h-full bg-gradient-to-r from-primary-400 to-primary-500;
+    @apply transition-all duration-300 ease-out;
+  }
+
+  /* Modal overlay */
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/50 backdrop-blur-sm;
+    @apply flex items-center justify-center p-4;
+    @apply animate-fade-in;
+  }
+
+  .modal-content {
+    @apply bg-white dark:bg-slate-900 rounded-2xl shadow-xl;
+    @apply w-full max-w-md;
+    @apply animate-scale-in;
+  }
+
+  /* Animation delays for stagger effect */
+  .stagger-1 {
+    animation-delay: 0.05s;
+  }
+  .stagger-2 {
+    animation-delay: 0.1s;
+  }
+  .stagger-3 {
+    animation-delay: 0.15s;
+  }
+  .stagger-4 {
+    animation-delay: 0.2s;
+  }
+  .stagger-5 {
+    animation-delay: 0.25s;
+  }
+}
+
+@layer utilities {
+  /* Mesh background */
+  .bg-mesh {
+    @apply bg-mesh-light dark:bg-mesh-dark;
+  }
+
+  /* Touch target (44px minimum for accessibility) */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  /* Hide scrollbar but allow scroll */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
