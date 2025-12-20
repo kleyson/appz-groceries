@@ -44,7 +44,7 @@ func (db *DB) Seed() error {
 	if err != nil {
 		return fmt.Errorf("failed to prepare insert statement: %w", err)
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	for _, cat := range DefaultCategories {
 		if _, err := stmt.Exec(cat.ID, cat.Name, cat.Icon, cat.Color, cat.SortOrder); err != nil {

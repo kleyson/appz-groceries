@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/client";
+import { clearAllData } from "@/lib/offline-db";
+import { syncQueue } from "@/lib/sync-queue";
 import type { User } from "@/types";
 
 export function useAuth() {
@@ -26,24 +28,34 @@ export function useAuth() {
   const loginMutation = useMutation({
     mutationFn: (data: { username: string; password: string }) =>
       api.login(data),
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       queryClient.setQueryData(["auth", "me"], data);
       queryClient.invalidateQueries({ queryKey: ["auth", "can-register"] });
+      // Clear any stale offline data and refetch from server
+      await clearAllData();
+      queryClient.invalidateQueries({ queryKey: ["lists"] });
+      // Process any pending sync actions
+      syncQueue.processQueue();
     },
   });
 
   const registerMutation = useMutation({
     mutationFn: (data: { username: string; name: string; password: string }) =>
       api.register(data),
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       queryClient.setQueryData(["auth", "me"], data);
       queryClient.invalidateQueries({ queryKey: ["auth", "can-register"] });
+      // Clear any stale offline data and refetch from server
+      await clearAllData();
+      queryClient.invalidateQueries({ queryKey: ["lists"] });
     },
   });
 
   const logoutMutation = useMutation({
     mutationFn: () => api.logout(),
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Clear offline data first
+      await clearAllData();
       queryClient.setQueryData(["auth", "me"], null);
       queryClient.clear();
     },

@@ -27,8 +27,8 @@ const queryClient = new QueryClient({
       retry: 1,
       // Don't refetch on window focus when offline
       refetchOnWindowFocus: () => navigator.onLine,
-      // Don't refetch on reconnect - let sync queue handle it
-      refetchOnReconnect: false,
+      // Refetch on reconnect to sync with server
+      refetchOnReconnect: true,
     },
   },
 });

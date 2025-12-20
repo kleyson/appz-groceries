@@ -91,7 +91,7 @@ func (h *ItemHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update list's updatedAt
-	h.listRepo.TouchUpdatedAt(listID, auth.GetCurrentTimestamp())
+	_ = h.listRepo.TouchUpdatedAt(listID, auth.GetCurrentTimestamp())
 
 	JSON(w, http.StatusCreated, item)
 }
@@ -166,7 +166,7 @@ func (h *ItemHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update list's updatedAt
-	h.listRepo.TouchUpdatedAt(listID, auth.GetCurrentTimestamp())
+	_ = h.listRepo.TouchUpdatedAt(listID, auth.GetCurrentTimestamp())
 
 	JSON(w, http.StatusOK, item)
 }
@@ -229,7 +229,7 @@ func (h *ItemHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update list's updatedAt
-	h.listRepo.TouchUpdatedAt(listID, auth.GetCurrentTimestamp())
+	_ = h.listRepo.TouchUpdatedAt(listID, auth.GetCurrentTimestamp())
 
 	JSON(w, http.StatusOK, map[string]bool{"success": true})
 }
@@ -255,7 +255,7 @@ func (h *ItemHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update list's updatedAt
-	h.listRepo.TouchUpdatedAt(listID, auth.GetCurrentTimestamp())
+	_ = h.listRepo.TouchUpdatedAt(listID, auth.GetCurrentTimestamp())
 
 	JSON(w, http.StatusOK, map[string]bool{"success": true})
 }

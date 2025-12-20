@@ -11,14 +11,14 @@ import (
 func JSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(models.APIResponse{Data: data})
+	_ = json.NewEncoder(w).Encode(models.APIResponse{Data: data})
 }
 
 // Error writes an error response
 func Error(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(models.APIResponse{
+	_ = json.NewEncoder(w).Encode(models.APIResponse{
 		Error: &models.APIError{
 			Code:    code,
 			Message: message,

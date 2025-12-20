@@ -48,7 +48,7 @@ func (r *SessionRepository) GetByID(id string) (*models.Session, error) {
 	// Check if expired
 	if session.ExpiresAt < time.Now().UnixMilli() {
 		// Delete expired session
-		r.Delete(id)
+		_ = r.Delete(id)
 		return nil, ErrSessionExpired
 	}
 

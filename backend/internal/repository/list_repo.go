@@ -47,7 +47,7 @@ func (r *ListRepository) GetAll() ([]models.ListWithCounts, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get lists: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var lists []models.ListWithCounts
 	for rows.Next() {
@@ -125,7 +125,7 @@ func (r *ListRepository) UpdateWithVersion(id string, name string, expectedVersi
 	if rowsAffected == 0 {
 		// Check if the list exists
 		var exists bool
-		r.db.QueryRow("SELECT 1 FROM lists WHERE id = ?", id).Scan(&exists)
+		_ = r.db.QueryRow("SELECT 1 FROM lists WHERE id = ?", id).Scan(&exists)
 		if exists {
 			return ErrVersionConflict
 		}

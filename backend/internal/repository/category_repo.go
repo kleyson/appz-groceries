@@ -41,7 +41,7 @@ func (r *CategoryRepository) GetAll() ([]models.Category, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get categories: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var categories []models.Category
 	for rows.Next() {
@@ -124,7 +124,6 @@ func (r *CategoryRepository) Update(id string, name, icon, color *string, sortOr
 		}
 		query += "sort_order = ?"
 		args = append(args, *sortOrder)
-		first = false
 	}
 
 	if len(args) == 0 {

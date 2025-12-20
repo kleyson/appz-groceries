@@ -42,7 +42,7 @@ func (r *ItemRepository) GetByListID(listID string) ([]models.Item, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get items: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var items []models.Item
 	for rows.Next() {
@@ -116,7 +116,7 @@ func (r *ItemRepository) UpdateWithVersion(item *models.Item, expectedVersion in
 	if rowsAffected == 0 {
 		// Check if the item exists
 		var exists bool
-		r.db.QueryRow("SELECT 1 FROM items WHERE id = ?", item.ID).Scan(&exists)
+		_ = r.db.QueryRow("SELECT 1 FROM items WHERE id = ?", item.ID).Scan(&exists)
 		if exists {
 			return ErrItemVersionConflict
 		}
@@ -172,14 +172,14 @@ func (r *ItemRepository) Reorder(itemIDs []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Don't increment version for reorder - it's a UI preference, not a data change
 	stmt, err := tx.Prepare("UPDATE items SET sort_order = ? WHERE id = ?")
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	for i, id := range itemIDs {
 		if _, err := stmt.Exec(i, id); err != nil {

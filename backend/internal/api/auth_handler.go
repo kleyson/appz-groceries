@@ -146,7 +146,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	session := GetSessionFromContext(r)
 	if session != nil {
-		h.sessionRepo.Delete(session.ID)
+		_ = h.sessionRepo.Delete(session.ID)
 	}
 	ClearSessionCookie(w)
 	JSON(w, http.StatusOK, map[string]bool{"success": true})
@@ -276,7 +276,7 @@ func (h *AuthHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete all sessions for this user
-	h.sessionRepo.DeleteByUserID(userID)
+	_ = h.sessionRepo.DeleteByUserID(userID)
 
 	JSON(w, http.StatusOK, map[string]bool{"success": true})
 }

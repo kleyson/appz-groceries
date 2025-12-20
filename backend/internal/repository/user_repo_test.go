@@ -15,23 +15,23 @@ func setupTestDB(t *testing.T) (*db.DB, func()) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	database, err := db.New(tmpFile.Name())
 	if err != nil {
-		os.Remove(tmpFile.Name())
+		_ = os.Remove(tmpFile.Name())
 		t.Fatalf("Failed to create database: %v", err)
 	}
 
 	if err := database.Migrate(); err != nil {
-		database.Close()
-		os.Remove(tmpFile.Name())
+		_ = database.Close()
+		_ = os.Remove(tmpFile.Name())
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
 	cleanup := func() {
-		database.Close()
-		os.Remove(tmpFile.Name())
+		_ = database.Close()
+		_ = os.Remove(tmpFile.Name())
 	}
 
 	return database, cleanup
