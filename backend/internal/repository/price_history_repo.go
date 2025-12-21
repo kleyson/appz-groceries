@@ -36,7 +36,7 @@ func (r *PriceHistoryRepository) GetByItemName(itemName string) ([]models.PriceH
 	if err != nil {
 		return nil, fmt.Errorf("failed to get price history: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var history []models.PriceHistory
 	for rows.Next() {

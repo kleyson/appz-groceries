@@ -72,7 +72,7 @@ func (r *UserRepository) GetAll() ([]models.User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get users: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var users []models.User
 	for rows.Next() {

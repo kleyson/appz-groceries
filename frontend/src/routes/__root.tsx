@@ -5,7 +5,7 @@ import {
   useLocation,
 } from "@tanstack/react-router";
 import { type QueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/hooks";
+import { useAuth, useDarkMode } from "@/hooks";
 import { useEffect } from "react";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { InstallPrompt } from "@/components/InstallPrompt";
@@ -22,6 +22,9 @@ function RootLayout() {
   const { isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Initialize dark mode at root level so it persists across all pages
+  useDarkMode();
 
   const isLoginPage = location.pathname === "/login";
 

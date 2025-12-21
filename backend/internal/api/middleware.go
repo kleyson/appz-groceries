@@ -76,7 +76,7 @@ func SetSessionCookie(w http.ResponseWriter, sessionID string, secure bool) {
 		MaxAge:   30 * 24 * 60 * 60, // 30 days
 		HttpOnly: true,
 		Secure:   secure,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode, // Lax for PWA compatibility
 	})
 }
 
