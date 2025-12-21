@@ -32,8 +32,10 @@ export function BarcodeScanner({
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Get available cameras on mount
+  // Get available cameras only when modal opens (not on mount)
   useEffect(() => {
+    if (!isOpen) return;
+
     Html5Qrcode.getCameras()
       .then((devices) => {
         if (devices && devices.length > 0) {
@@ -58,7 +60,7 @@ export function BarcodeScanner({
         }
       })
       .catch(console.error);
-  }, []);
+  }, [isOpen]);
 
   // Score cameras to prefer main/wide over ultra-wide/telephoto
   const getCameraScore = (label: string): number => {

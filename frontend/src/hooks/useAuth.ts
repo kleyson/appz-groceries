@@ -4,6 +4,33 @@ import { clearAllData } from "@/lib/offline-db";
 import { syncQueue } from "@/lib/sync-queue";
 import type { User, AuthResponse } from "@/types";
 
+// Type guards for error checking (works better with mocks than instanceof)
+function isNetworkError(err: unknown): boolean {
+  return err instanceof Error && err.name === "NetworkError";
+}
+
+function isAPIError(err: unknown): err is Error & {
+  status: number;
+  isUnauthorized: boolean;
+  isServerError: boolean;
+} {
+  return err instanceof Error && err.name === "APIError" && "status" in err;
+}
+
+function isUnauthorizedError(err: unknown): boolean {
+  if (isAPIError(err)) {
+    return err.isUnauthorized;
+  }
+  return false;
+}
+
+function isServerError(err: unknown): boolean {
+  if (isAPIError(err)) {
+    return err.isServerError;
+  }
+  return false;
+}
+
 const AUTH_CACHE_KEY = "groceries_auth_cache";
 
 function getCachedAuth(): AuthResponse | undefined {
@@ -45,7 +72,7 @@ export function useAuth() {
         return result;
       } catch (err) {
         // If offline and we have cached auth, use it
-        if (!navigator.onLine) {
+        if (isNetworkError(err)) {
           const cached = getCachedAuth();
           if (cached) {
             return cached;
@@ -54,7 +81,11 @@ export function useAuth() {
         throw err;
       }
     },
-    retry: 2,
+    // Only retry on network errors, not on 401 (which is expected when not logged in)
+    retry: (failureCount, err) => {
+      if (isUnauthorizedError(err)) return false;
+      return failureCount < 2;
+    },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
     staleTime: 5 * 60 * 1000, // 5 minutes
     // Use cached data as placeholder while loading
@@ -113,8 +144,10 @@ export function useAuth() {
   const isAuthenticated = !!user;
   const canRegister = canRegisterData?.canRegister ?? false;
 
-  // Backend is unavailable when we have an error and no cached data
-  const isBackendUnavailable = !!error && !authData;
+  // Backend is unavailable only for network errors or server errors (5xx)
+  // A 401 means the server is working fine, user just isn't logged in
+  const isBackendUnavailable =
+    !!error && !authData && (isNetworkError(error) || isServerError(error));
 
   const retryConnection = async () => {
     await refetch();

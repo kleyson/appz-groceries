@@ -14,6 +14,36 @@ import type {
   UsersResponse,
 } from "@/types";
 
+// Custom error class to distinguish HTTP errors from network errors
+export class APIError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code: string,
+  ) {
+    super(message);
+    this.name = "APIError";
+  }
+
+  // 401 means server is working, user just isn't authenticated
+  get isUnauthorized(): boolean {
+    return this.status === 401;
+  }
+
+  // 5xx errors indicate server problems
+  get isServerError(): boolean {
+    return this.status >= 500;
+  }
+}
+
+// Network error - fetch failed entirely (truly offline)
+export class NetworkError extends Error {
+  constructor(message: string = "Network request failed") {
+    super(message);
+    this.name = "NetworkError";
+  }
+}
+
 class APIClient {
   private baseUrl = "/api";
 
@@ -21,14 +51,21 @@ class APIClient {
     path: string,
     options: RequestInit = {},
   ): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
-      credentials: "include",
-    });
+    let response: Response;
+
+    try {
+      response = await fetch(`${this.baseUrl}${path}`, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...options.headers,
+        },
+        credentials: "include",
+      });
+    } catch {
+      // Fetch failed entirely - network error (truly offline)
+      throw new NetworkError();
+    }
 
     const data = (await response.json()) as APIResponse<T>;
 
@@ -37,7 +74,7 @@ class APIClient {
         code: "UNKNOWN",
         message: "An error occurred",
       };
-      throw new Error(error.message);
+      throw new APIError(error.message, response.status, error.code);
     }
 
     return data.data as T;
