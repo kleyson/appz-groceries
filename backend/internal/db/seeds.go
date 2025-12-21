@@ -1,33 +1,30 @@
 package db
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/kleyson/groceries/backend/internal/models"
+)
 
 // DefaultCategories are the preset grocery categories
-var DefaultCategories = []struct {
-	ID        string
-	Name      string
-	Icon      string
-	Color     string
-	SortOrder int
-}{
-	{"produce", "Produce", "shopping-bag", "#22C55E", 0},
-	{"dairy", "Dairy", "droplet", "#3B82F6", 1},
-	{"meat", "Meat", "target", "#EF4444", 2},
-	{"bakery", "Bakery", "sun", "#F59E0B", 3},
-	{"frozen", "Frozen", "thermometer", "#06B6D4", 4},
-	{"beverages", "Beverages", "coffee", "#8B5CF6", 5},
-	{"snacks", "Snacks", "zap", "#EC4899", 6},
-	{"pantry", "Pantry", "archive", "#78716C", 7},
-	{"household", "Household", "home", "#6366F1", 8},
-	{"other", "Other", "package", "#94A3B8", 9},
+var DefaultCategories = []models.Category{
+	{ID: "01PRODUCE000000000000000000", Name: "Produce", Icon: "shopping-bag", Color: "#22C55E", SortOrder: 0, IsDefault: true},
+	{ID: "02DAIRY00000000000000000000", Name: "Dairy", Icon: "droplet", Color: "#3B82F6", SortOrder: 1, IsDefault: true},
+	{ID: "03MEAT000000000000000000000", Name: "Meat", Icon: "target", Color: "#EF4444", SortOrder: 2, IsDefault: true},
+	{ID: "04BAKERY0000000000000000000", Name: "Bakery", Icon: "sun", Color: "#F59E0B", SortOrder: 3, IsDefault: true},
+	{ID: "05FROZEN0000000000000000000", Name: "Frozen", Icon: "thermometer", Color: "#06B6D4", SortOrder: 4, IsDefault: true},
+	{ID: "06BEVERAGES00000000000000000", Name: "Beverages", Icon: "coffee", Color: "#8B5CF6", SortOrder: 5, IsDefault: true},
+	{ID: "07SNACKS0000000000000000000", Name: "Snacks", Icon: "zap", Color: "#EC4899", SortOrder: 6, IsDefault: true},
+	{ID: "08PANTRY0000000000000000000", Name: "Pantry", Icon: "archive", Color: "#78716C", SortOrder: 7, IsDefault: true},
+	{ID: "09HOUSEHOLD00000000000000000", Name: "Household", Icon: "home", Color: "#6366F1", SortOrder: 8, IsDefault: true},
+	{ID: "10OTHER00000000000000000000", Name: "Other", Icon: "package", Color: "#94A3B8", SortOrder: 9, IsDefault: true},
 }
 
 // Seed populates the database with default data
 func (db *DB) Seed() error {
 	// Check if categories already exist
-	var count int
-	err := db.QueryRow("SELECT COUNT(*) FROM categories WHERE is_default = 1").Scan(&count)
-	if err != nil {
+	var count int64
+	if err := db.Model(&models.Category{}).Where("is_default = ?", true).Count(&count).Error; err != nil {
 		return fmt.Errorf("failed to check existing categories: %w", err)
 	}
 
@@ -37,19 +34,8 @@ func (db *DB) Seed() error {
 	}
 
 	// Insert default categories
-	stmt, err := db.Prepare(`
-		INSERT INTO categories (id, name, icon, color, sort_order, is_default)
-		VALUES (?, ?, ?, ?, ?, 1)
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare insert statement: %w", err)
-	}
-	defer func() { _ = stmt.Close() }()
-
-	for _, cat := range DefaultCategories {
-		if _, err := stmt.Exec(cat.ID, cat.Name, cat.Icon, cat.Color, cat.SortOrder); err != nil {
-			return fmt.Errorf("failed to insert category %s: %w", cat.ID, err)
-		}
+	if err := db.Create(&DefaultCategories).Error; err != nil {
+		return fmt.Errorf("failed to insert categories: %w", err)
 	}
 
 	return nil

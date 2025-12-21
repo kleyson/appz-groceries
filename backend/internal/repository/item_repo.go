@@ -1,9 +1,9 @@
 package repository
 
 import (
-	"database/sql"
 	"errors"
-	"fmt"
+
+	"gorm.io/gorm"
 
 	"github.com/kleyson/groceries/backend/internal/db"
 	"github.com/kleyson/groceries/backend/internal/models"
@@ -22,79 +22,47 @@ func NewItemRepository(database *db.DB) *ItemRepository {
 
 func (r *ItemRepository) Create(item *models.Item) error {
 	item.Version = 1 // Initial version
-	_, err := r.db.Exec(`
-		INSERT INTO items (id, list_id, name, quantity, unit, category_id, checked, price, store, sort_order, version)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, item.ID, item.ListID, item.Name, item.Quantity, item.Unit, item.CategoryID, item.Checked, item.Price, item.Store, item.SortOrder, item.Version)
-	if err != nil {
-		return fmt.Errorf("failed to create item: %w", err)
-	}
-	return nil
+	return r.db.Create(item).Error
 }
 
 func (r *ItemRepository) GetByListID(listID string) ([]models.Item, error) {
-	rows, err := r.db.Query(`
-		SELECT id, list_id, name, quantity, unit, category_id, checked, price, store, sort_order, version
-		FROM items
-		WHERE list_id = ?
-		ORDER BY sort_order ASC
-	`, listID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get items: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
 	var items []models.Item
-	for rows.Next() {
-		var item models.Item
-		err := rows.Scan(
-			&item.ID, &item.ListID, &item.Name, &item.Quantity, &item.Unit,
-			&item.CategoryID, &item.Checked, &item.Price, &item.Store, &item.SortOrder, &item.Version,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan item: %w", err)
-		}
-		items = append(items, item)
+	err := r.db.Where("list_id = ?", listID).Order("sort_order ASC").Find(&items).Error
+	if err != nil {
+		return nil, err
 	}
-
-	if items == nil {
-		items = []models.Item{}
-	}
-
 	return items, nil
 }
 
 func (r *ItemRepository) GetByID(id string) (*models.Item, error) {
-	item := &models.Item{}
-	err := r.db.QueryRow(`
-		SELECT id, list_id, name, quantity, unit, category_id, checked, price, store, sort_order, version
-		FROM items WHERE id = ?
-	`, id).Scan(
-		&item.ID, &item.ListID, &item.Name, &item.Quantity, &item.Unit,
-		&item.CategoryID, &item.Checked, &item.Price, &item.Store, &item.SortOrder, &item.Version,
-	)
+	var item models.Item
+	err := r.db.First(&item, "id = ?", id).Error
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrItemNotFound
 		}
-		return nil, fmt.Errorf("failed to get item: %w", err)
+		return nil, err
 	}
-	return item, nil
+	return &item, nil
 }
 
 func (r *ItemRepository) Update(item *models.Item) error {
-	// Increment version on every update
-	result, err := r.db.Exec(`
-		UPDATE items
-		SET name = ?, quantity = ?, unit = ?, category_id = ?, price = ?, store = ?, version = version + 1
-		WHERE id = ?
-	`, item.Name, item.Quantity, item.Unit, item.CategoryID, item.Price, item.Store, item.ID)
-	if err != nil {
-		return fmt.Errorf("failed to update item: %w", err)
-	}
+	result := r.db.Model(&models.Item{}).
+		Where("id = ?", item.ID).
+		Updates(map[string]interface{}{
+			"name":        item.Name,
+			"quantity":    item.Quantity,
+			"unit":        item.Unit,
+			"category_id": item.CategoryID,
+			"price":       item.Price,
+			"store":       item.Store,
+			"version":     gorm.Expr("version + 1"),
+		})
 
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
 		return ErrItemNotFound
 	}
 
@@ -103,21 +71,26 @@ func (r *ItemRepository) Update(item *models.Item) error {
 
 // UpdateWithVersion updates an item only if the version matches (optimistic locking)
 func (r *ItemRepository) UpdateWithVersion(item *models.Item, expectedVersion int) error {
-	result, err := r.db.Exec(`
-		UPDATE items
-		SET name = ?, quantity = ?, unit = ?, category_id = ?, price = ?, store = ?, version = version + 1
-		WHERE id = ? AND version = ?
-	`, item.Name, item.Quantity, item.Unit, item.CategoryID, item.Price, item.Store, item.ID, expectedVersion)
-	if err != nil {
-		return fmt.Errorf("failed to update item: %w", err)
-	}
+	result := r.db.Model(&models.Item{}).
+		Where("id = ? AND version = ?", item.ID, expectedVersion).
+		Updates(map[string]interface{}{
+			"name":        item.Name,
+			"quantity":    item.Quantity,
+			"unit":        item.Unit,
+			"category_id": item.CategoryID,
+			"price":       item.Price,
+			"store":       item.Store,
+			"version":     gorm.Expr("version + 1"),
+		})
 
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
 		// Check if the item exists
-		var exists bool
-		_ = r.db.QueryRow("SELECT 1 FROM items WHERE id = ?", item.ID).Scan(&exists)
-		if exists {
+		var count int64
+		r.db.Model(&models.Item{}).Where("id = ?", item.ID).Count(&count)
+		if count > 0 {
 			return ErrItemVersionConflict
 		}
 		return ErrItemNotFound
@@ -126,70 +99,86 @@ func (r *ItemRepository) UpdateWithVersion(item *models.Item, expectedVersion in
 	return nil
 }
 
-func (r *ItemRepository) ToggleChecked(id string) error {
-	// Increment version on toggle
-	result, err := r.db.Exec("UPDATE items SET checked = NOT checked, version = version + 1 WHERE id = ?", id)
+func (r *ItemRepository) ToggleChecked(id string, userID string, userName string) (*models.Item, error) {
+	// First get the current state
+	item, err := r.GetByID(id)
 	if err != nil {
-		return fmt.Errorf("failed to toggle item: %w", err)
+		return nil, err
 	}
 
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return ErrItemNotFound
+	newChecked := !item.Checked
+
+	// Prepare updates
+	updates := map[string]interface{}{
+		"checked": newChecked,
+		"version": gorm.Expr("version + 1"),
 	}
 
-	return nil
+	// If checking, set the user info; if unchecking, clear it
+	if newChecked {
+		updates["checked_by"] = userID
+		updates["checked_by_name"] = userName
+	} else {
+		updates["checked_by"] = nil
+		updates["checked_by_name"] = nil
+	}
+
+	result := r.db.Model(&models.Item{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, ErrItemNotFound
+	}
+
+	// Update the item struct and return it
+	item.Checked = newChecked
+	if newChecked {
+		item.CheckedBy = &userID
+		item.CheckedByName = &userName
+	} else {
+		item.CheckedBy = nil
+		item.CheckedByName = nil
+	}
+	item.Version++
+
+	return item, nil
 }
 
 func (r *ItemRepository) Delete(id string) error {
-	result, err := r.db.Exec("DELETE FROM items WHERE id = ?", id)
-	if err != nil {
-		return fmt.Errorf("failed to delete item: %w", err)
+	result := r.db.Delete(&models.Item{}, "id = ?", id)
+	if result.Error != nil {
+		return result.Error
 	}
-
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return ErrItemNotFound
 	}
-
 	return nil
 }
 
 func (r *ItemRepository) GetMaxSortOrder(listID string) (int, error) {
-	var maxOrder sql.NullInt64
-	err := r.db.QueryRow("SELECT MAX(sort_order) FROM items WHERE list_id = ?", listID).Scan(&maxOrder)
+	var maxOrder *int
+	err := r.db.Model(&models.Item{}).
+		Where("list_id = ?", listID).
+		Select("MAX(sort_order)").
+		Scan(&maxOrder).Error
+
 	if err != nil {
-		return 0, fmt.Errorf("failed to get max sort order: %w", err)
+		return 0, err
 	}
-	if !maxOrder.Valid {
+	if maxOrder == nil {
 		return -1, nil
 	}
-	return int(maxOrder.Int64), nil
+	return *maxOrder, nil
 }
 
 func (r *ItemRepository) Reorder(itemIDs []string) error {
-	tx, err := r.db.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	// Don't increment version for reorder - it's a UI preference, not a data change
-	stmt, err := tx.Prepare("UPDATE items SET sort_order = ? WHERE id = ?")
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer func() { _ = stmt.Close() }()
-
-	for i, id := range itemIDs {
-		if _, err := stmt.Exec(i, id); err != nil {
-			return fmt.Errorf("failed to update sort order for item %s: %w", id, err)
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for i, id := range itemIDs {
+			if err := tx.Model(&models.Item{}).Where("id = ?", id).Update("sort_order", i).Error; err != nil {
+				return err
+			}
 		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return nil
+		return nil
+	})
 }

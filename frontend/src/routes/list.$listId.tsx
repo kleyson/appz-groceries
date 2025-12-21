@@ -1,6 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { ArrowLeft, Plus, Trash2, Check, GripVertical } from "lucide-react";
+import {
+  ArrowLeft,
+  Plus,
+  Trash2,
+  Check,
+  GripVertical,
+  ScanBarcode,
+} from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -34,6 +41,8 @@ import {
   formatQuantity,
   getCategoryColor,
 } from "@/lib/utils";
+import { BarcodeScanner } from "@/components/BarcodeScanner";
+import type { ProductInfo } from "@/lib/barcode-lookup";
 import type { CreateItemRequest, UpdateItemRequest, Item } from "@/types";
 
 export const Route = createFileRoute("/list/$listId")({
@@ -122,7 +131,7 @@ function SortableItem({
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
               <Badge
                 size="sm"
                 style={{
@@ -142,6 +151,11 @@ function SortableItem({
               {item.store && !isChecked && (
                 <span className="text-sm text-slate-400 dark:text-slate-500">
                   @ {item.store}
+                </span>
+              )}
+              {isChecked && item.checkedByName && (
+                <span className="text-xs text-slate-400 dark:text-slate-500 italic">
+                  by {item.checkedByName}
                 </span>
               )}
             </div>
@@ -180,6 +194,7 @@ function ListDetailPage() {
   const { categories, getCategoryById } = useCategories();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [formData, setFormData] = useState<CreateItemRequest>({
@@ -277,16 +292,49 @@ function ListDetailPage() {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      const oldIndex = uncheckedItems.findIndex((item) => item.id === active.id);
+      const oldIndex = uncheckedItems.findIndex(
+        (item) => item.id === active.id,
+      );
       const newIndex = uncheckedItems.findIndex((item) => item.id === over.id);
 
       if (oldIndex !== -1 && newIndex !== -1) {
         const newOrder = arrayMove(uncheckedItems, oldIndex, newIndex);
         // Include checked items at the end to maintain full order
-        const allItemIds = [...newOrder, ...checkedItems].map((item) => item.id);
+        const allItemIds = [...newOrder, ...checkedItems].map(
+          (item) => item.id,
+        );
         await reorderItems(allItemIds);
       }
     }
+  };
+
+  const handleProductScanned = (product: ProductInfo) => {
+    // Map product category to our category ID
+    const categoryMap: Record<string, string> = {
+      Produce: "01PRODUCE000000000000000000",
+      Dairy: "02DAIRY00000000000000000000",
+      Meat: "03MEAT000000000000000000000",
+      Bakery: "04BAKERY0000000000000000000",
+      Frozen: "05FROZEN0000000000000000000",
+      Beverages: "06BEVERAGES00000000000000000",
+      Snacks: "07SNACKS0000000000000000000",
+      Pantry: "08PANTRY0000000000000000000",
+      Household: "09HOUSEHOLD00000000000000000",
+    };
+
+    const categoryId = product.category
+      ? categoryMap[product.category] || "10OTHER00000000000000000000"
+      : "10OTHER00000000000000000000";
+
+    // Pre-fill the form with scanned product info
+    setFormData({
+      name: product.name,
+      quantity: 1,
+      categoryId,
+    });
+
+    // Open the add modal so user can review/edit before adding
+    setIsAddModalOpen(true);
   };
 
   const uncheckedItems = items.filter((item) => !item.checked);
@@ -328,10 +376,20 @@ function ListDetailPage() {
             {totalPrice > 0 && ` · ${formatCurrency(totalPrice)}`}
           </p>
         </div>
-        <Button size="sm" onClick={() => setIsAddModalOpen(true)}>
-          <Plus className="w-4 h-4" />
-          Add
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setIsScannerOpen(true)}
+            aria-label="Scan barcode"
+          >
+            <ScanBarcode className="w-4 h-4" />
+          </Button>
+          <Button size="sm" onClick={() => setIsAddModalOpen(true)}>
+            <Plus className="w-4 h-4" />
+            Add
+          </Button>
+        </div>
       </header>
 
       {/* Progress */}
@@ -712,6 +770,13 @@ function ListDetailPage() {
           </Button>
         </div>
       </Modal>
+
+      {/* Barcode Scanner */}
+      <BarcodeScanner
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onProductFound={handleProductScanned}
+      />
     </div>
   );
 }

@@ -1,9 +1,9 @@
 package repository
 
 import (
-	"database/sql"
 	"errors"
-	"fmt"
+
+	"gorm.io/gorm"
 
 	"github.com/kleyson/groceries/backend/internal/db"
 	"github.com/kleyson/groceries/backend/internal/models"
@@ -21,102 +21,77 @@ func NewUserRepository(database *db.DB) *UserRepository {
 }
 
 func (r *UserRepository) Create(user *models.User) error {
-	_, err := r.db.Exec(`
-		INSERT INTO users (id, username, name, password_hash, is_admin, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, user.ID, user.Username, user.Name, user.PasswordHash, user.IsAdmin, user.CreatedAt)
+	err := r.db.Create(user).Error
 	if err != nil {
 		if isUniqueConstraintError(err) {
 			return ErrUsernameTaken
 		}
-		return fmt.Errorf("failed to create user: %w", err)
+		return err
 	}
 	return nil
 }
 
 func (r *UserRepository) GetByID(id string) (*models.User, error) {
-	user := &models.User{}
-	err := r.db.QueryRow(`
-		SELECT id, username, name, password_hash, is_admin, created_at
-		FROM users WHERE id = ?
-	`, id).Scan(&user.ID, &user.Username, &user.Name, &user.PasswordHash, &user.IsAdmin, &user.CreatedAt)
+	var user models.User
+	err := r.db.First(&user, "id = ?", id).Error
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrUserNotFound
 		}
-		return nil, fmt.Errorf("failed to get user: %w", err)
+		return nil, err
 	}
-	return user, nil
+	return &user, nil
 }
 
 func (r *UserRepository) GetByUsername(username string) (*models.User, error) {
-	user := &models.User{}
-	err := r.db.QueryRow(`
-		SELECT id, username, name, password_hash, is_admin, created_at
-		FROM users WHERE username = ?
-	`, username).Scan(&user.ID, &user.Username, &user.Name, &user.PasswordHash, &user.IsAdmin, &user.CreatedAt)
+	var user models.User
+	err := r.db.First(&user, "username = ?", username).Error
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrUserNotFound
 		}
-		return nil, fmt.Errorf("failed to get user: %w", err)
+		return nil, err
 	}
-	return user, nil
+	return &user, nil
 }
 
 func (r *UserRepository) GetAll() ([]models.User, error) {
-	rows, err := r.db.Query(`
-		SELECT id, username, name, password_hash, is_admin, created_at
-		FROM users ORDER BY created_at ASC
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get users: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
 	var users []models.User
-	for rows.Next() {
-		var user models.User
-		err := rows.Scan(&user.ID, &user.Username, &user.Name, &user.PasswordHash, &user.IsAdmin, &user.CreatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan user: %w", err)
-		}
-		users = append(users, user)
+	err := r.db.Order("created_at ASC").Find(&users).Error
+	if err != nil {
+		return nil, err
 	}
-
-	if users == nil {
-		users = []models.User{}
-	}
-
 	return users, nil
 }
 
 func (r *UserRepository) Delete(id string) error {
-	result, err := r.db.Exec("DELETE FROM users WHERE id = ?", id)
-	if err != nil {
-		return fmt.Errorf("failed to delete user: %w", err)
+	result := r.db.Delete(&models.User{}, "id = ?", id)
+	if result.Error != nil {
+		return result.Error
 	}
-
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return ErrUserNotFound
 	}
-
 	return nil
 }
 
-func (r *UserRepository) Count() (int, error) {
-	var count int
-	err := r.db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
+func (r *UserRepository) Count() (int64, error) {
+	var count int64
+	err := r.db.Model(&models.User{}).Count(&count).Error
 	if err != nil {
-		return 0, fmt.Errorf("failed to count users: %w", err)
+		return 0, err
 	}
 	return count, nil
 }
 
 func isUniqueConstraintError(err error) bool {
-	return err != nil && (contains(err.Error(), "UNIQUE constraint failed") ||
-		contains(err.Error(), "unique constraint"))
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return contains(errStr, "UNIQUE constraint failed") ||
+		contains(errStr, "unique constraint") ||
+		contains(errStr, "duplicate key")
 }
 
 func contains(s, substr string) bool {

@@ -66,6 +66,8 @@ export interface Item {
   unit: string | null;
   categoryId: string;
   checked: boolean;
+  checkedBy: string | null;
+  checkedByName: string | null;
   price: number | null;
   store: string | null;
   sortOrder: number;

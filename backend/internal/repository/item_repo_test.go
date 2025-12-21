@@ -33,21 +33,37 @@ func createTestCategory(t *testing.T, catRepo *CategoryRepository, id, name stri
 	}
 }
 
-func setupItemTestDB(t *testing.T) (*ItemRepository, *ListRepository, *CategoryRepository, func()) {
+func setupItemTestDB(t *testing.T) (*ItemRepository, *ListRepository, *CategoryRepository, *UserRepository, func()) {
 	database, cleanup := setupTestDB(t)
+	userRepo := NewUserRepository(database)
 	listRepo := NewListRepository(database)
 	catRepo := NewCategoryRepository(database)
 	itemRepo := NewItemRepository(database)
 
-	// Create test list and category that items require
+	// Create test user, list, and category that items require
+	createTestUser(t, userRepo, "user-1", "testuser", "Test User")
 	createTestList(t, listRepo, "list-1", "Test List")
 	createTestCategory(t, catRepo, "test-cat", "Test Category")
 
-	return itemRepo, listRepo, catRepo, cleanup
+	return itemRepo, listRepo, catRepo, userRepo, cleanup
+}
+
+func createTestUser(t *testing.T, userRepo *UserRepository, id, username, name string) {
+	user := &models.User{
+		ID:           id,
+		Username:     username,
+		Name:         name,
+		PasswordHash: "hash",
+		IsAdmin:      false,
+		CreatedAt:    1000,
+	}
+	if err := userRepo.Create(user); err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
 }
 
 func TestItemRepository_Create(t *testing.T) {
-	repo, _, _, cleanup := setupItemTestDB(t)
+	repo, _, _, _, cleanup := setupItemTestDB(t)
 	defer cleanup()
 
 	item := &models.Item{
@@ -84,7 +100,7 @@ func TestItemRepository_Create(t *testing.T) {
 }
 
 func TestItemRepository_GetByListID(t *testing.T) {
-	repo, listRepo, _, cleanup := setupItemTestDB(t)
+	repo, listRepo, _, _, cleanup := setupItemTestDB(t)
 	defer cleanup()
 
 	// Create additional list
@@ -146,7 +162,7 @@ func TestItemRepository_GetByListID(t *testing.T) {
 }
 
 func TestItemRepository_GetByID(t *testing.T) {
-	repo, _, _, cleanup := setupItemTestDB(t)
+	repo, _, _, _, cleanup := setupItemTestDB(t)
 	defer cleanup()
 
 	item := &models.Item{
@@ -182,7 +198,7 @@ func TestItemRepository_GetByID(t *testing.T) {
 }
 
 func TestItemRepository_Update(t *testing.T) {
-	repo, _, _, cleanup := setupItemTestDB(t)
+	repo, _, _, _, cleanup := setupItemTestDB(t)
 	defer cleanup()
 
 	item := &models.Item{
@@ -235,7 +251,7 @@ func TestItemRepository_Update(t *testing.T) {
 }
 
 func TestItemRepository_ToggleChecked(t *testing.T) {
-	repo, _, _, cleanup := setupItemTestDB(t)
+	repo, _, _, _, cleanup := setupItemTestDB(t)
 	defer cleanup()
 
 	item := &models.Item{
@@ -253,39 +269,49 @@ func TestItemRepository_ToggleChecked(t *testing.T) {
 	}
 
 	// Toggle to checked
-	err := repo.ToggleChecked("item-1")
+	toggled, err := repo.ToggleChecked("item-1", "user-1", "Test User")
 	if err != nil {
 		t.Fatalf("Failed to toggle item: %v", err)
 	}
 
-	found, _ := repo.GetByID("item-1")
-	if !found.Checked {
+	if !toggled.Checked {
 		t.Error("Expected item to be checked")
 	}
-	if found.Version != 2 {
-		t.Errorf("Expected version 2, got %d", found.Version)
+	if toggled.Version != 2 {
+		t.Errorf("Expected version 2, got %d", toggled.Version)
+	}
+	if toggled.CheckedBy == nil || *toggled.CheckedBy != "user-1" {
+		t.Error("Expected CheckedBy to be 'user-1'")
+	}
+	if toggled.CheckedByName == nil || *toggled.CheckedByName != "Test User" {
+		t.Error("Expected CheckedByName to be 'Test User'")
 	}
 
 	// Toggle back to unchecked
-	err = repo.ToggleChecked("item-1")
+	toggled, err = repo.ToggleChecked("item-1", "user-1", "Test User")
 	if err != nil {
 		t.Fatalf("Failed to toggle item: %v", err)
 	}
 
-	found, _ = repo.GetByID("item-1")
-	if found.Checked {
+	if toggled.Checked {
 		t.Error("Expected item to be unchecked")
+	}
+	if toggled.CheckedBy != nil {
+		t.Error("Expected CheckedBy to be nil when unchecked")
+	}
+	if toggled.CheckedByName != nil {
+		t.Error("Expected CheckedByName to be nil when unchecked")
 	}
 
 	// Toggle non-existing item
-	err = repo.ToggleChecked("non-existent")
+	_, err = repo.ToggleChecked("non-existent", "user-1", "Test User")
 	if err != ErrItemNotFound {
 		t.Errorf("Expected ErrItemNotFound, got %v", err)
 	}
 }
 
 func TestItemRepository_Delete(t *testing.T) {
-	repo, _, _, cleanup := setupItemTestDB(t)
+	repo, _, _, _, cleanup := setupItemTestDB(t)
 	defer cleanup()
 
 	item := &models.Item{
@@ -321,7 +347,7 @@ func TestItemRepository_Delete(t *testing.T) {
 }
 
 func TestItemRepository_GetMaxSortOrder(t *testing.T) {
-	repo, _, _, cleanup := setupItemTestDB(t)
+	repo, _, _, _, cleanup := setupItemTestDB(t)
 	defer cleanup()
 
 	// Empty list should return -1
@@ -358,7 +384,7 @@ func TestItemRepository_GetMaxSortOrder(t *testing.T) {
 }
 
 func TestItemRepository_Reorder(t *testing.T) {
-	repo, _, _, cleanup := setupItemTestDB(t)
+	repo, _, _, _, cleanup := setupItemTestDB(t)
 	defer cleanup()
 
 	// Create items with initial order

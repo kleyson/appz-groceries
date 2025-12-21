@@ -176,6 +176,13 @@ func (h *ItemHandler) ToggleChecked(w http.ResponseWriter, r *http.Request) {
 	listID := chi.URLParam(r, "listId")
 	id := chi.URLParam(r, "id")
 
+	// Get current user from context
+	user := GetUserFromContext(r)
+	if user == nil {
+		Unauthorized(w, "User not authenticated")
+		return
+	}
+
 	// Verify item exists and belongs to list
 	item, err := h.itemRepo.GetByID(id)
 	if err != nil {
@@ -192,14 +199,14 @@ func (h *ItemHandler) ToggleChecked(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.itemRepo.ToggleChecked(id); err != nil {
+	// Toggle with user info
+	updatedItem, err := h.itemRepo.ToggleChecked(id, user.ID, user.Name)
+	if err != nil {
 		InternalError(w, "Failed to toggle item")
 		return
 	}
 
-	// Return updated item
-	item.Checked = !item.Checked
-	JSON(w, http.StatusOK, item)
+	JSON(w, http.StatusOK, updatedItem)
 }
 
 // Delete deletes an item

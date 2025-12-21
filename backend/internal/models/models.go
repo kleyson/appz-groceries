@@ -2,42 +2,44 @@ package models
 
 // User represents a registered user
 type User struct {
-	ID           string `json:"id"`
-	Username     string `json:"username"`
-	Name         string `json:"name"`
-	PasswordHash string `json:"-"` // Never expose in JSON
-	IsAdmin      bool   `json:"isAdmin"`
-	CreatedAt    int64  `json:"createdAt"`
+	ID           string `json:"id" gorm:"primaryKey;size:26"`
+	Username     string `json:"username" gorm:"uniqueIndex;size:100;not null"`
+	Name         string `json:"name" gorm:"size:200;not null"`
+	PasswordHash string `json:"-" gorm:"column:password_hash;not null"`
+	IsAdmin      bool   `json:"isAdmin" gorm:"column:is_admin;default:false;not null"`
+	CreatedAt    int64  `json:"createdAt" gorm:"column:created_at;not null"`
 }
 
 // Session represents an active user session
 type Session struct {
-	ID        string `json:"id"`
-	UserID    string `json:"userId"`
-	ExpiresAt int64  `json:"expiresAt"`
-	CreatedAt int64  `json:"createdAt"`
+	ID        string `json:"id" gorm:"primaryKey;size:26"`
+	UserID    string `json:"userId" gorm:"column:user_id;index;size:26;not null"`
+	User      *User  `json:"-" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
+	ExpiresAt int64  `json:"expiresAt" gorm:"column:expires_at;index;not null"`
+	CreatedAt int64  `json:"createdAt" gorm:"column:created_at;not null"`
 }
 
 // Category represents a grocery item category
 type Category struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Icon      string `json:"icon"`
-	Color     string `json:"color"`
-	SortOrder int    `json:"sortOrder"`
-	IsDefault bool   `json:"isDefault"`
+	ID        string `json:"id" gorm:"primaryKey;size:26"`
+	Name      string `json:"name" gorm:"size:100;not null"`
+	Icon      string `json:"icon" gorm:"size:50;not null"`
+	Color     string `json:"color" gorm:"size:20;not null"`
+	SortOrder int    `json:"sortOrder" gorm:"column:sort_order;default:0;not null"`
+	IsDefault bool   `json:"isDefault" gorm:"column:is_default;default:false;not null"`
 }
 
 // List represents a grocery list
 type List struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Version   int    `json:"version"` // For optimistic locking / conflict detection
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	ID        string `json:"id" gorm:"primaryKey;size:26"`
+	Name      string `json:"name" gorm:"size:200;not null"`
+	Version   int    `json:"version" gorm:"default:1;not null"`
+	CreatedAt int64  `json:"createdAt" gorm:"column:created_at;not null"`
+	UpdatedAt int64  `json:"updatedAt" gorm:"column:updated_at;not null"`
+	Items     []Item `json:"-" gorm:"foreignKey:ListID;constraint:OnDelete:CASCADE"`
 }
 
-// ListWithCounts includes item statistics
+// ListWithCounts includes item statistics (not a GORM model, used for queries)
 type ListWithCounts struct {
 	List
 	TotalItems   int     `json:"totalItems"`
@@ -47,26 +49,31 @@ type ListWithCounts struct {
 
 // Item represents a grocery item in a list
 type Item struct {
-	ID         string   `json:"id"`
-	ListID     string   `json:"listId"`
-	Name       string   `json:"name"`
-	Quantity   int      `json:"quantity"`
-	Unit       *string  `json:"unit"`
-	CategoryID string   `json:"categoryId"`
-	Checked    bool     `json:"checked"`
-	Price      *float64 `json:"price"`
-	Store      *string  `json:"store"`
-	SortOrder  int      `json:"sortOrder"`
-	Version    int      `json:"version"` // For optimistic locking / conflict detection
+	ID            string    `json:"id" gorm:"primaryKey;size:26"`
+	ListID        string    `json:"listId" gorm:"column:list_id;index;size:26;not null"`
+	List          *List     `json:"-" gorm:"foreignKey:ListID"`
+	Name          string    `json:"name" gorm:"size:200;not null"`
+	Quantity      int       `json:"quantity" gorm:"default:1;not null"`
+	Unit          *string   `json:"unit" gorm:"size:50"`
+	CategoryID    string    `json:"categoryId" gorm:"column:category_id;index;size:26;not null;default:'other'"`
+	Category      *Category `json:"-" gorm:"foreignKey:CategoryID"`
+	Checked       bool      `json:"checked" gorm:"default:false;not null"`
+	CheckedBy     *string   `json:"checkedBy" gorm:"column:checked_by;size:26"`
+	CheckedByUser *User     `json:"-" gorm:"foreignKey:CheckedBy"`
+	CheckedByName *string   `json:"checkedByName" gorm:"column:checked_by_name;size:200"`
+	Price         *float64  `json:"price"`
+	Store         *string   `json:"store" gorm:"size:200"`
+	SortOrder     int       `json:"sortOrder" gorm:"column:sort_order;default:0;not null"`
+	Version       int       `json:"version" gorm:"default:1;not null"`
 }
 
 // PriceHistory tracks historical prices for items
 type PriceHistory struct {
-	ID         string  `json:"id"`
-	ItemName   string  `json:"itemName"`
-	Price      float64 `json:"price"`
-	Store      *string `json:"store"`
-	RecordedAt int64   `json:"recordedAt"`
+	ID         string  `json:"id" gorm:"primaryKey;size:26"`
+	ItemName   string  `json:"itemName" gorm:"column:item_name;index;size:200;not null"`
+	Price      float64 `json:"price" gorm:"not null"`
+	Store      *string `json:"store" gorm:"size:200"`
+	RecordedAt int64   `json:"recordedAt" gorm:"column:recorded_at;not null"`
 }
 
 // CreateListRequest is the request body for creating a list

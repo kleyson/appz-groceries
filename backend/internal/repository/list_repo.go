@@ -1,9 +1,9 @@
 package repository
 
 import (
-	"database/sql"
 	"errors"
-	"fmt"
+
+	"gorm.io/gorm"
 
 	"github.com/kleyson/groceries/backend/internal/db"
 	"github.com/kleyson/groceries/backend/internal/models"
@@ -22,44 +22,26 @@ func NewListRepository(database *db.DB) *ListRepository {
 
 func (r *ListRepository) Create(list *models.List) error {
 	list.Version = 1 // Initial version
-	_, err := r.db.Exec(`
-		INSERT INTO lists (id, name, version, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?)
-	`, list.ID, list.Name, list.Version, list.CreatedAt, list.UpdatedAt)
-	if err != nil {
-		return fmt.Errorf("failed to create list: %w", err)
-	}
-	return nil
+	return r.db.Create(list).Error
 }
 
 func (r *ListRepository) GetAll() ([]models.ListWithCounts, error) {
-	rows, err := r.db.Query(`
-		SELECT
+	var lists []models.ListWithCounts
+
+	err := r.db.Table("lists l").
+		Select(`
 			l.id, l.name, l.version, l.created_at, l.updated_at,
 			COUNT(i.id) as total_items,
 			SUM(CASE WHEN i.checked = 1 THEN 1 ELSE 0 END) as checked_items,
 			COALESCE(SUM(CASE WHEN i.price IS NOT NULL THEN i.price * i.quantity ELSE 0 END), 0) as total_price
-		FROM lists l
-		LEFT JOIN items i ON l.id = i.list_id
-		GROUP BY l.id
-		ORDER BY l.updated_at DESC
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get lists: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
+		`).
+		Joins("LEFT JOIN items i ON l.id = i.list_id").
+		Group("l.id").
+		Order("l.updated_at DESC").
+		Scan(&lists).Error
 
-	var lists []models.ListWithCounts
-	for rows.Next() {
-		var list models.ListWithCounts
-		err := rows.Scan(
-			&list.ID, &list.Name, &list.Version, &list.CreatedAt, &list.UpdatedAt,
-			&list.TotalItems, &list.CheckedItems, &list.TotalPrice,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan list: %w", err)
-		}
-		lists = append(lists, list)
+	if err != nil {
+		return nil, err
 	}
 
 	if lists == nil {
@@ -70,41 +52,44 @@ func (r *ListRepository) GetAll() ([]models.ListWithCounts, error) {
 }
 
 func (r *ListRepository) GetByID(id string) (*models.ListWithCounts, error) {
-	list := &models.ListWithCounts{}
-	err := r.db.QueryRow(`
-		SELECT
+	var list models.ListWithCounts
+
+	err := r.db.Table("lists l").
+		Select(`
 			l.id, l.name, l.version, l.created_at, l.updated_at,
 			COUNT(i.id) as total_items,
 			SUM(CASE WHEN i.checked = 1 THEN 1 ELSE 0 END) as checked_items,
 			COALESCE(SUM(CASE WHEN i.price IS NOT NULL THEN i.price * i.quantity ELSE 0 END), 0) as total_price
-		FROM lists l
-		LEFT JOIN items i ON l.id = i.list_id
-		WHERE l.id = ?
-		GROUP BY l.id
-	`, id).Scan(
-		&list.ID, &list.Name, &list.Version, &list.CreatedAt, &list.UpdatedAt,
-		&list.TotalItems, &list.CheckedItems, &list.TotalPrice,
-	)
+		`).
+		Joins("LEFT JOIN items i ON l.id = i.list_id").
+		Where("l.id = ?", id).
+		Group("l.id").
+		Scan(&list).Error
+
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrListNotFound
-		}
-		return nil, fmt.Errorf("failed to get list: %w", err)
+		return nil, err
 	}
-	return list, nil
+
+	if list.ID == "" {
+		return nil, ErrListNotFound
+	}
+
+	return &list, nil
 }
 
 func (r *ListRepository) Update(id string, name string, updatedAt int64) error {
-	// Increment version on every update
-	result, err := r.db.Exec(`
-		UPDATE lists SET name = ?, version = version + 1, updated_at = ? WHERE id = ?
-	`, name, updatedAt, id)
-	if err != nil {
-		return fmt.Errorf("failed to update list: %w", err)
-	}
+	result := r.db.Model(&models.List{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"name":       name,
+			"version":    gorm.Expr("version + 1"),
+			"updated_at": updatedAt,
+		})
 
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
 		return ErrListNotFound
 	}
 
@@ -113,20 +98,22 @@ func (r *ListRepository) Update(id string, name string, updatedAt int64) error {
 
 // UpdateWithVersion updates a list only if the version matches (optimistic locking)
 func (r *ListRepository) UpdateWithVersion(id string, name string, expectedVersion int, updatedAt int64) error {
-	result, err := r.db.Exec(`
-		UPDATE lists SET name = ?, version = version + 1, updated_at = ?
-		WHERE id = ? AND version = ?
-	`, name, updatedAt, id, expectedVersion)
-	if err != nil {
-		return fmt.Errorf("failed to update list: %w", err)
-	}
+	result := r.db.Model(&models.List{}).
+		Where("id = ? AND version = ?", id, expectedVersion).
+		Updates(map[string]interface{}{
+			"name":       name,
+			"version":    gorm.Expr("version + 1"),
+			"updated_at": updatedAt,
+		})
 
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
 		// Check if the list exists
-		var exists bool
-		_ = r.db.QueryRow("SELECT 1 FROM lists WHERE id = ?", id).Scan(&exists)
-		if exists {
+		var count int64
+		r.db.Model(&models.List{}).Where("id = ?", id).Count(&count)
+		if count > 0 {
 			return ErrVersionConflict
 		}
 		return ErrListNotFound
@@ -136,23 +123,21 @@ func (r *ListRepository) UpdateWithVersion(id string, name string, expectedVersi
 }
 
 func (r *ListRepository) Delete(id string) error {
-	result, err := r.db.Exec("DELETE FROM lists WHERE id = ?", id)
-	if err != nil {
-		return fmt.Errorf("failed to delete list: %w", err)
+	result := r.db.Delete(&models.List{}, "id = ?", id)
+	if result.Error != nil {
+		return result.Error
 	}
-
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return ErrListNotFound
 	}
-
 	return nil
 }
 
 func (r *ListRepository) TouchUpdatedAt(id string, updatedAt int64) error {
-	_, err := r.db.Exec("UPDATE lists SET version = version + 1, updated_at = ? WHERE id = ?", updatedAt, id)
-	if err != nil {
-		return fmt.Errorf("failed to update list timestamp: %w", err)
-	}
-	return nil
+	return r.db.Model(&models.List{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"version":    gorm.Expr("version + 1"),
+			"updated_at": updatedAt,
+		}).Error
 }

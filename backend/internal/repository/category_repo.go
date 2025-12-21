@@ -1,9 +1,9 @@
 package repository
 
 import (
-	"database/sql"
 	"errors"
-	"fmt"
+
+	"gorm.io/gorm"
 
 	"github.com/kleyson/groceries/backend/internal/db"
 	"github.com/kleyson/groceries/backend/internal/models"
@@ -22,61 +22,28 @@ func NewCategoryRepository(database *db.DB) *CategoryRepository {
 }
 
 func (r *CategoryRepository) Create(category *models.Category) error {
-	_, err := r.db.Exec(`
-		INSERT INTO categories (id, name, icon, color, sort_order, is_default)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, category.ID, category.Name, category.Icon, category.Color, category.SortOrder, category.IsDefault)
-	if err != nil {
-		return fmt.Errorf("failed to create category: %w", err)
-	}
-	return nil
+	return r.db.Create(category).Error
 }
 
 func (r *CategoryRepository) GetAll() ([]models.Category, error) {
-	rows, err := r.db.Query(`
-		SELECT id, name, icon, color, sort_order, is_default
-		FROM categories
-		ORDER BY sort_order ASC
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get categories: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
 	var categories []models.Category
-	for rows.Next() {
-		var cat models.Category
-		var isDefault int
-		err := rows.Scan(&cat.ID, &cat.Name, &cat.Icon, &cat.Color, &cat.SortOrder, &isDefault)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan category: %w", err)
-		}
-		cat.IsDefault = isDefault == 1
-		categories = append(categories, cat)
+	err := r.db.Order("sort_order ASC").Find(&categories).Error
+	if err != nil {
+		return nil, err
 	}
-
-	if categories == nil {
-		categories = []models.Category{}
-	}
-
 	return categories, nil
 }
 
 func (r *CategoryRepository) GetByID(id string) (*models.Category, error) {
-	cat := &models.Category{}
-	var isDefault int
-	err := r.db.QueryRow(`
-		SELECT id, name, icon, color, sort_order, is_default
-		FROM categories WHERE id = ?
-	`, id).Scan(&cat.ID, &cat.Name, &cat.Icon, &cat.Color, &cat.SortOrder, &isDefault)
+	var category models.Category
+	err := r.db.First(&category, "id = ?", id).Error
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrCategoryNotFound
 		}
-		return nil, fmt.Errorf("failed to get category: %w", err)
+		return nil, err
 	}
-	cat.IsDefault = isDefault == 1
-	return cat, nil
+	return &category, nil
 }
 
 func (r *CategoryRepository) Update(id string, name, icon, color *string, sortOrder *int) error {
@@ -89,57 +56,30 @@ func (r *CategoryRepository) Update(id string, name, icon, color *string, sortOr
 		return ErrCannotModifyDefault
 	}
 
-	// Build dynamic update query
-	query := "UPDATE categories SET "
-	args := []interface{}{}
-	first := true
-
+	// Build updates map
+	updates := make(map[string]interface{})
 	if name != nil {
-		if !first {
-			query += ", "
-		}
-		query += "name = ?"
-		args = append(args, *name)
-		first = false
+		updates["name"] = *name
 	}
 	if icon != nil {
-		if !first {
-			query += ", "
-		}
-		query += "icon = ?"
-		args = append(args, *icon)
-		first = false
+		updates["icon"] = *icon
 	}
 	if color != nil {
-		if !first {
-			query += ", "
-		}
-		query += "color = ?"
-		args = append(args, *color)
-		first = false
+		updates["color"] = *color
 	}
 	if sortOrder != nil {
-		if !first {
-			query += ", "
-		}
-		query += "sort_order = ?"
-		args = append(args, *sortOrder)
+		updates["sort_order"] = *sortOrder
 	}
 
-	if len(args) == 0 {
+	if len(updates) == 0 {
 		return nil // Nothing to update
 	}
 
-	query += " WHERE id = ?"
-	args = append(args, id)
-
-	result, err := r.db.Exec(query, args...)
-	if err != nil {
-		return fmt.Errorf("failed to update category: %w", err)
+	result := r.db.Model(&models.Category{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return result.Error
 	}
-
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return ErrCategoryNotFound
 	}
 
@@ -156,13 +96,11 @@ func (r *CategoryRepository) Delete(id string) error {
 		return ErrCannotDeleteDefault
 	}
 
-	result, err := r.db.Exec("DELETE FROM categories WHERE id = ?", id)
-	if err != nil {
-		return fmt.Errorf("failed to delete category: %w", err)
+	result := r.db.Delete(&models.Category{}, "id = ?", id)
+	if result.Error != nil {
+		return result.Error
 	}
-
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return ErrCategoryNotFound
 	}
 
@@ -170,13 +108,13 @@ func (r *CategoryRepository) Delete(id string) error {
 }
 
 func (r *CategoryRepository) GetMaxSortOrder() (int, error) {
-	var maxOrder sql.NullInt64
-	err := r.db.QueryRow("SELECT MAX(sort_order) FROM categories").Scan(&maxOrder)
+	var maxOrder *int
+	err := r.db.Model(&models.Category{}).Select("MAX(sort_order)").Scan(&maxOrder).Error
 	if err != nil {
-		return 0, fmt.Errorf("failed to get max sort order: %w", err)
+		return 0, err
 	}
-	if !maxOrder.Valid {
+	if maxOrder == nil {
 		return -1, nil
 	}
-	return int(maxOrder.Int64), nil
+	return *maxOrder, nil
 }

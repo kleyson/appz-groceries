@@ -1,10 +1,10 @@
 package repository
 
 import (
-	"database/sql"
 	"errors"
-	"fmt"
 	"time"
+
+	"gorm.io/gorm"
 
 	"github.com/kleyson/groceries/backend/internal/db"
 	"github.com/kleyson/groceries/backend/internal/models"
@@ -22,27 +22,17 @@ func NewSessionRepository(database *db.DB) *SessionRepository {
 }
 
 func (r *SessionRepository) Create(session *models.Session) error {
-	_, err := r.db.Exec(`
-		INSERT INTO sessions (id, user_id, expires_at, created_at)
-		VALUES (?, ?, ?, ?)
-	`, session.ID, session.UserID, session.ExpiresAt, session.CreatedAt)
-	if err != nil {
-		return fmt.Errorf("failed to create session: %w", err)
-	}
-	return nil
+	return r.db.Create(session).Error
 }
 
 func (r *SessionRepository) GetByID(id string) (*models.Session, error) {
-	session := &models.Session{}
-	err := r.db.QueryRow(`
-		SELECT id, user_id, expires_at, created_at
-		FROM sessions WHERE id = ?
-	`, id).Scan(&session.ID, &session.UserID, &session.ExpiresAt, &session.CreatedAt)
+	var session models.Session
+	err := r.db.First(&session, "id = ?", id).Error
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrSessionNotFound
 		}
-		return nil, fmt.Errorf("failed to get session: %w", err)
+		return nil, err
 	}
 
 	// Check if expired
@@ -52,30 +42,18 @@ func (r *SessionRepository) GetByID(id string) (*models.Session, error) {
 		return nil, ErrSessionExpired
 	}
 
-	return session, nil
+	return &session, nil
 }
 
 func (r *SessionRepository) Delete(id string) error {
-	_, err := r.db.Exec("DELETE FROM sessions WHERE id = ?", id)
-	if err != nil {
-		return fmt.Errorf("failed to delete session: %w", err)
-	}
-	return nil
+	return r.db.Delete(&models.Session{}, "id = ?", id).Error
 }
 
 func (r *SessionRepository) DeleteByUserID(userID string) error {
-	_, err := r.db.Exec("DELETE FROM sessions WHERE user_id = ?", userID)
-	if err != nil {
-		return fmt.Errorf("failed to delete user sessions: %w", err)
-	}
-	return nil
+	return r.db.Delete(&models.Session{}, "user_id = ?", userID).Error
 }
 
 func (r *SessionRepository) CleanupExpired() error {
 	now := time.Now().UnixMilli()
-	_, err := r.db.Exec("DELETE FROM sessions WHERE expires_at < ?", now)
-	if err != nil {
-		return fmt.Errorf("failed to cleanup expired sessions: %w", err)
-	}
-	return nil
+	return r.db.Delete(&models.Session{}, "expires_at < ?", now).Error
 }
