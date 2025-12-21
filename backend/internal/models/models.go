@@ -55,7 +55,7 @@ type Item struct {
 	Name          string    `json:"name" gorm:"size:200;not null"`
 	Quantity      int       `json:"quantity" gorm:"default:1;not null"`
 	Unit          *string   `json:"unit" gorm:"size:50"`
-	CategoryID    string    `json:"categoryId" gorm:"column:category_id;index;size:26;not null;default:'other'"`
+	CategoryID    string    `json:"categoryId" gorm:"column:category_id;index;size:26;not null;default:'10OTHER00000000000000000000'"`
 	Category      *Category `json:"-" gorm:"foreignKey:CategoryID"`
 	Checked       bool      `json:"checked" gorm:"default:false;not null"`
 	CheckedBy     *string   `json:"checkedBy" gorm:"column:checked_by;size:26"`
