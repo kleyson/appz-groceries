@@ -33,6 +33,8 @@ export function useAuth() {
     data: authData,
     isLoading,
     error,
+    refetch,
+    isRefetching,
   } = useQuery({
     queryKey: ["auth", "me"],
     queryFn: async () => {
@@ -52,17 +54,22 @@ export function useAuth() {
         throw err;
       }
     },
-    retry: false,
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
     staleTime: 5 * 60 * 1000, // 5 minutes
     // Use cached data as placeholder while loading
     placeholderData: () => getCachedAuth(),
+    // Don't refetch automatically when there's an error
+    refetchOnWindowFocus: (query) => query.state.status !== "error",
   });
 
-  const { data: canRegisterData } = useQuery({
+  const { data: canRegisterData, refetch: refetchCanRegister } = useQuery({
     queryKey: ["auth", "can-register"],
     queryFn: () => api.canRegister(),
-    retry: false,
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
     staleTime: 60 * 1000, // 1 minute
+    refetchOnWindowFocus: (query) => query.state.status !== "error",
   });
 
   const loginMutation = useMutation({
@@ -106,12 +113,22 @@ export function useAuth() {
   const isAuthenticated = !!user;
   const canRegister = canRegisterData?.canRegister ?? false;
 
+  // Backend is unavailable when we have an error and no cached data
+  const isBackendUnavailable = !!error && !authData;
+
+  const retryConnection = async () => {
+    await refetch();
+    await refetchCanRegister();
+  };
+
   return {
     user,
     isAuthenticated,
-    isLoading,
+    isLoading: isLoading || isRefetching,
     error,
     canRegister,
+    isBackendUnavailable,
+    retryConnection,
     login: loginMutation.mutateAsync,
     register: registerMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,

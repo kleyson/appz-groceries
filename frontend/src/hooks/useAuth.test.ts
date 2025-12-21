@@ -66,9 +66,13 @@ describe("useAuth", () => {
       wrapper: createWrapper(),
     });
 
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
+    // Longer timeout needed because useAuth has retry: 2 with exponential backoff
+    await waitFor(
+      () => {
+        expect(result.current.isLoading).toBe(false);
+      },
+      { timeout: 10000 },
+    );
 
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.user).toBeNull();
@@ -82,9 +86,12 @@ describe("useAuth", () => {
       wrapper: createWrapper(),
     });
 
-    await waitFor(() => {
-      expect(result.current.canRegister).toBe(true);
-    });
+    await waitFor(
+      () => {
+        expect(result.current.canRegister).toBe(true);
+      },
+      { timeout: 10000 },
+    );
   });
 
   it("should return canRegister false when users exist", async () => {
@@ -95,9 +102,12 @@ describe("useAuth", () => {
       wrapper: createWrapper(),
     });
 
-    await waitFor(() => {
-      expect(result.current.canRegister).toBe(false);
-    });
+    await waitFor(
+      () => {
+        expect(result.current.canRegister).toBe(false);
+      },
+      { timeout: 10000 },
+    );
   });
 
   it("should identify admin users", async () => {

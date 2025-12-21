@@ -6,9 +6,10 @@ import {
 } from "@tanstack/react-router";
 import { type QueryClient } from "@tanstack/react-query";
 import { useAuth, useDarkMode } from "@/hooks";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { WifiOff, RefreshCw } from "lucide-react";
 
 interface RouterContext {
   queryClient: QueryClient;
@@ -19,9 +20,11 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 });
 
 function RootLayout() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isBackendUnavailable, retryConnection } =
+    useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [isRetrying, setIsRetrying] = useState(false);
 
   // Initialize dark mode at root level so it persists across all pages
   useDarkMode();
@@ -29,11 +32,55 @@ function RootLayout() {
   const isLoginPage = location.pathname === "/login";
 
   useEffect(() => {
-    // Only redirect to login if not authenticated and not already on login page
-    if (!isLoading && !isAuthenticated && !isLoginPage) {
+    // Only redirect to login if not authenticated, not loading, backend is available, and not already on login page
+    if (
+      !isLoading &&
+      !isAuthenticated &&
+      !isBackendUnavailable &&
+      !isLoginPage
+    ) {
       navigate({ to: "/login" });
     }
-  }, [isAuthenticated, isLoading, isLoginPage, navigate]);
+  }, [isAuthenticated, isLoading, isBackendUnavailable, isLoginPage, navigate]);
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    try {
+      await retryConnection();
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
+  // Show backend unavailable error state
+  if (isBackendUnavailable && !isLoginPage) {
+    return (
+      <div className="min-h-screen bg-mesh flex items-center justify-center p-4">
+        <div className="max-w-sm w-full text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+            <WifiOff className="w-8 h-8 text-red-600 dark:text-red-400" />
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+            Server Unavailable
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            Unable to connect to the server. Please check your connection and
+            try again.
+          </p>
+          <button
+            onClick={handleRetry}
+            disabled={isRetrying}
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-medium transition-colors disabled:opacity-50 min-h-[44px]"
+          >
+            <RefreshCw
+              className={`w-5 h-5 ${isRetrying ? "animate-spin" : ""}`}
+            />
+            {isRetrying ? "Retrying..." : "Retry Connection"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Show loading spinner only for protected routes (not login page)
   if (isLoading && !isLoginPage) {

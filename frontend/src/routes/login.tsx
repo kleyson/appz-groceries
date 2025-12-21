@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
-import { ShoppingCart, WifiOff } from "lucide-react";
+import { ShoppingCart, WifiOff, ServerOff, RefreshCw } from "lucide-react";
 import { useAuth, useOnlineStatus } from "@/hooks";
 import { Button, Input, Card, CardContent } from "@/components/ui";
 import { APP_VERSION } from "@/lib/version";
@@ -21,6 +21,8 @@ function LoginPage() {
     isRegistering,
     loginError,
     registerError,
+    isBackendUnavailable,
+    retryConnection,
   } = useAuth();
 
   const [username, setUsername] = useState("");
@@ -28,6 +30,16 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    try {
+      await retryConnection();
+    } finally {
+      setIsRetrying(false);
+    }
+  };
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -100,6 +112,37 @@ function LoginPage() {
             </div>
           )}
 
+          {/* Server Unavailable Banner */}
+          {isOnline && isBackendUnavailable && (
+            <div
+              className="mb-6 -mt-2 -mx-2 p-4 rounded-xl bg-red-600 dark:bg-red-700 text-white"
+              role="alert"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-500 dark:bg-red-600 flex items-center justify-center">
+                  <ServerOff className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium">Server unavailable</p>
+                  <p className="text-sm text-red-100">
+                    Unable to connect to the server
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  disabled={isRetrying}
+                  className="flex-shrink-0 p-2 rounded-lg bg-red-500 hover:bg-red-400 dark:bg-red-600 dark:hover:bg-red-500 transition-colors disabled:opacity-50 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                  aria-label="Retry connection"
+                >
+                  <RefreshCw
+                    className={`w-5 h-5 ${isRetrying ? "animate-spin" : ""}`}
+                  />
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col items-center mb-8">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center mb-4 shadow-lg">
               <ShoppingCart className="w-8 h-8 text-white" />
@@ -123,7 +166,7 @@ function LoginPage() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Enter your name"
                 autoComplete="name"
-                disabled={!isOnline}
+                disabled={!isOnline || isBackendUnavailable}
                 required
               />
             )}
@@ -135,7 +178,7 @@ function LoginPage() {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Enter your username"
               autoComplete="username"
-              disabled={!isOnline}
+              disabled={!isOnline || isBackendUnavailable}
               required
             />
 
@@ -146,7 +189,7 @@ function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
               autoComplete={canRegister ? "new-password" : "current-password"}
-              disabled={!isOnline}
+              disabled={!isOnline || isBackendUnavailable}
               required
             />
 
@@ -158,7 +201,7 @@ function LoginPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Confirm your password"
                 autoComplete="new-password"
-                disabled={!isOnline}
+                disabled={!isOnline || isBackendUnavailable}
                 required
               />
             )}
@@ -172,7 +215,7 @@ function LoginPage() {
             <Button
               type="submit"
               className="w-full"
-              disabled={!isOnline}
+              disabled={!isOnline || isBackendUnavailable}
               isLoading={isLoggingIn || isRegistering}
             >
               {canRegister ? "Create Account" : "Sign In"}
