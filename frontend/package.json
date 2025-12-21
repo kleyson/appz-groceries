@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "type-check": "tsc --noEmit",
-    "postinstall": "../scripts/install-hooks.sh"
+    "postinstall": "[ -f ../scripts/install-hooks.sh ] && ../scripts/install-hooks.sh || true"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
