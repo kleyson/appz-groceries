@@ -1,6 +1,23 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { ArrowLeft, Plus, Trash2, Check } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Check, GripVertical } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useList, useItems, useCategories } from "@/hooks";
 import {
   Button,
@@ -17,11 +34,131 @@ import {
   formatQuantity,
   getCategoryColor,
 } from "@/lib/utils";
-import type { CreateItemRequest } from "@/types";
+import type { CreateItemRequest, UpdateItemRequest, Item } from "@/types";
 
 export const Route = createFileRoute("/list/$listId")({
   component: ListDetailPage,
 });
+
+// Sortable Item Component
+interface SortableItemProps {
+  item: Item;
+  category: { name: string; color: string } | undefined;
+  categoryColor: string;
+  onToggle: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  isChecked?: boolean;
+}
+
+function SortableItem({
+  item,
+  category,
+  categoryColor,
+  onToggle,
+  onEdit,
+  onDelete,
+  isChecked = false,
+}: SortableItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <Card
+      ref={setNodeRef}
+      style={style}
+      className={cn(isDragging && "shadow-lg ring-2 ring-primary-500")}
+    >
+      <CardContent className="py-3">
+        <div className="flex items-center gap-3">
+          {/* Drag Handle */}
+          <button
+            {...attributes}
+            {...listeners}
+            className="p-1 -ml-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-grab active:cursor-grabbing touch-target"
+            aria-label="Drag to reorder"
+          >
+            <GripVertical className="w-4 h-4" />
+          </button>
+
+          <Checkbox
+            checked={item.checked}
+            onChange={onToggle}
+            aria-label={`Mark ${item.name} as ${item.checked ? "not done" : "done"}`}
+          />
+
+          {/* Clickable content area for editing */}
+          <button
+            onClick={onEdit}
+            className="flex-1 min-w-0 text-left"
+            aria-label={`Edit ${item.name}`}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "font-medium truncate",
+                  isChecked
+                    ? "text-slate-500 dark:text-slate-400 line-through"
+                    : "text-slate-900 dark:text-white",
+                )}
+              >
+                {item.name}
+              </span>
+              {item.quantity > 1 && (
+                <span className="text-sm text-slate-500 dark:text-slate-400">
+                  {formatQuantity(item.quantity, item.unit)}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <Badge
+                size="sm"
+                style={{
+                  backgroundColor: `${categoryColor}20`,
+                  color: categoryColor,
+                }}
+              >
+                {category?.name ?? "Other"}
+              </Badge>
+              {item.price && !isChecked && (
+                <span className="text-sm text-slate-500 dark:text-slate-400">
+                  {formatCurrency(item.price)}
+                  {item.quantity > 1 &&
+                    ` (${formatCurrency(item.price * item.quantity)})`}
+                </span>
+              )}
+              {item.store && !isChecked && (
+                <span className="text-sm text-slate-400 dark:text-slate-500">
+                  @ {item.store}
+                </span>
+              )}
+            </div>
+          </button>
+
+          <button
+            onClick={onDelete}
+            className="p-2 -mr-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors touch-target"
+            aria-label={`Delete ${item.name}`}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function ListDetailPage() {
   const { listId } = Route.useParams();
@@ -33,19 +170,35 @@ function ListDetailPage() {
     uncheckedCount,
     totalPrice,
     createItem,
+    updateItem,
     toggleItem,
     deleteItem,
+    reorderItems,
     isCreating,
+    isUpdating,
   } = useItems(listId);
   const { categories, getCategoryById } = useCategories();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [formData, setFormData] = useState<CreateItemRequest>({
     name: "",
     quantity: 1,
     categoryId: "other",
   });
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   const isLoading = listLoading || itemsLoading;
 
@@ -88,6 +241,52 @@ function ListDetailPage() {
   const handleDelete = async (id: string) => {
     await deleteItem(id);
     setDeleteConfirm(null);
+  };
+
+  const handleEditItem = (item: Item) => {
+    setEditingItem(item);
+    setFormData({
+      name: item.name,
+      quantity: item.quantity,
+      unit: item.unit ?? undefined,
+      categoryId: item.categoryId,
+      price: item.price ?? undefined,
+      store: item.store ?? undefined,
+    });
+  };
+
+  const handleUpdateItem = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingItem || !formData.name.trim()) return;
+
+    const updateData: UpdateItemRequest = {
+      name: formData.name.trim(),
+      quantity: formData.quantity || 1,
+      unit: formData.unit,
+      categoryId: formData.categoryId || "other",
+      price: formData.price,
+      store: formData.store,
+    };
+
+    await updateItem({ id: editingItem.id, data: updateData });
+    setEditingItem(null);
+    setFormData({ name: "", quantity: 1, categoryId: "other" });
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = uncheckedItems.findIndex((item) => item.id === active.id);
+      const newIndex = uncheckedItems.findIndex((item) => item.id === over.id);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newOrder = arrayMove(uncheckedItems, oldIndex, newIndex);
+        // Include checked items at the end to maintain full order
+        const allItemIds = [...newOrder, ...checkedItems].map((item) => item.id);
+        await reorderItems(allItemIds);
+      }
+    }
   };
 
   const uncheckedItems = items.filter((item) => !item.checked);
@@ -170,79 +369,40 @@ function ListDetailPage() {
         </Card>
       ) : (
         <div className="space-y-6">
-          {/* Unchecked Items */}
+          {/* Unchecked Items - Draggable */}
           {uncheckedItems.length > 0 && (
-            <div className="space-y-2">
-              {uncheckedItems.map((item, index) => {
-                const category = getCategoryById(item.categoryId);
-                const categoryColor = getCategoryColor(item.categoryId);
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={uncheckedItems.map((item) => item.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-2">
+                  {uncheckedItems.map((item) => {
+                    const category = getCategoryById(item.categoryId);
+                    const categoryColor = getCategoryColor(item.categoryId);
 
-                return (
-                  <Card
-                    key={item.id}
-                    className={cn(
-                      "animate-slide-up",
-                      `stagger-${Math.min(index + 1, 5)}`,
-                    )}
-                  >
-                    <CardContent className="py-3">
-                      <div className="flex items-center gap-3">
-                        <Checkbox
-                          checked={item.checked}
-                          onChange={() => handleToggle(item.id)}
-                          aria-label={`Mark ${item.name} as done`}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-slate-900 dark:text-white truncate">
-                              {item.name}
-                            </span>
-                            {item.quantity > 1 && (
-                              <span className="text-sm text-slate-500 dark:text-slate-400">
-                                {formatQuantity(item.quantity, item.unit)}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge
-                              size="sm"
-                              style={{
-                                backgroundColor: `${categoryColor}20`,
-                                color: categoryColor,
-                              }}
-                            >
-                              {category?.name ?? "Other"}
-                            </Badge>
-                            {item.price && (
-                              <span className="text-sm text-slate-500 dark:text-slate-400">
-                                {formatCurrency(item.price)}
-                                {item.quantity > 1 &&
-                                  ` (${formatCurrency(item.price * item.quantity)})`}
-                              </span>
-                            )}
-                            {item.store && (
-                              <span className="text-sm text-slate-400 dark:text-slate-500">
-                                @ {item.store}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => setDeleteConfirm(item.id)}
-                          className="p-2 -mr-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors touch-target"
-                          aria-label={`Delete ${item.name}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+                    return (
+                      <SortableItem
+                        key={item.id}
+                        item={item}
+                        category={category}
+                        categoryColor={categoryColor}
+                        onToggle={() => handleToggle(item.id)}
+                        onEdit={() => handleEditItem(item)}
+                        onDelete={() => setDeleteConfirm(item.id)}
+                      />
+                    );
+                  })}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
 
-          {/* Checked Items */}
+          {/* Checked Items - Not draggable */}
           {checkedItems.length > 0 && (
             <div>
               <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-2">
@@ -255,40 +415,16 @@ function ListDetailPage() {
                   const categoryColor = getCategoryColor(item.categoryId);
 
                   return (
-                    <Card key={item.id}>
-                      <CardContent className="py-3">
-                        <div className="flex items-center gap-3">
-                          <Checkbox
-                            checked={item.checked}
-                            onChange={() => handleToggle(item.id)}
-                            aria-label={`Unmark ${item.name}`}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <span className="font-medium text-slate-500 dark:text-slate-400 line-through truncate">
-                              {item.name}
-                            </span>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge
-                                size="sm"
-                                style={{
-                                  backgroundColor: `${categoryColor}20`,
-                                  color: categoryColor,
-                                }}
-                              >
-                                {category?.name ?? "Other"}
-                              </Badge>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => setDeleteConfirm(item.id)}
-                            className="p-2 -mr-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors touch-target"
-                            aria-label={`Delete ${item.name}`}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <SortableItem
+                      key={item.id}
+                      item={item}
+                      category={category}
+                      categoryColor={categoryColor}
+                      onToggle={() => handleToggle(item.id)}
+                      onEdit={() => handleEditItem(item)}
+                      onDelete={() => setDeleteConfirm(item.id)}
+                      isChecked
+                    />
                   );
                 })}
               </div>
@@ -425,6 +561,127 @@ function ListDetailPage() {
                 Add & Close
               </Button>
             </div>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Item Modal */}
+      <Modal
+        isOpen={!!editingItem}
+        onClose={() => {
+          setEditingItem(null);
+          setFormData({ name: "", quantity: 1, categoryId: "other" });
+        }}
+        title="Edit Item"
+      >
+        <form onSubmit={handleUpdateItem} className="space-y-4">
+          <Input
+            label="Item Name"
+            name="itemName"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            placeholder="e.g., Milk"
+            autoFocus
+            required
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Quantity"
+              type="number"
+              min={1}
+              value={formData.quantity ?? 1}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  quantity: parseInt(e.target.value) || 1,
+                })
+              }
+            />
+            <Input
+              label="Unit (optional)"
+              value={formData.unit ?? ""}
+              onChange={(e) =>
+                setFormData({ ...formData, unit: e.target.value })
+              }
+              placeholder="e.g., lbs"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Category
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {categories.map((cat) => {
+                const isSelected = formData.categoryId === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, categoryId: cat.id })
+                    }
+                    className={cn(
+                      "px-3 py-1.5 rounded-full text-sm font-medium transition-all",
+                      isSelected
+                        ? "ring-2 ring-offset-2 ring-primary-500"
+                        : "hover:opacity-80",
+                    )}
+                    style={{
+                      backgroundColor: `${cat.color}20`,
+                      color: cat.color,
+                    }}
+                  >
+                    {cat.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Price (optional)"
+              type="number"
+              min={0}
+              step={0.01}
+              value={formData.price ?? ""}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  price: e.target.value
+                    ? parseFloat(e.target.value)
+                    : undefined,
+                })
+              }
+              placeholder="0.00"
+            />
+            <Input
+              label="Store (optional)"
+              value={formData.store ?? ""}
+              onChange={(e) =>
+                setFormData({ ...formData, store: e.target.value })
+              }
+              placeholder="e.g., Costco"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              className="flex-1"
+              onClick={() => {
+                setEditingItem(null);
+                setFormData({ name: "", quantity: 1, categoryId: "other" });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" className="flex-1" isLoading={isUpdating}>
+              Save Changes
+            </Button>
           </div>
         </form>
       </Modal>
