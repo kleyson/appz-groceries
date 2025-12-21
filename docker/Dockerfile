@@ -7,17 +7,34 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Build backend
-FROM golang:1.25.5-alpine AS backend-builder
+FROM --platform=$BUILDPLATFORM golang:1.25.5-alpine AS backend-builder
+ARG TARGETARCH
+ARG TARGETOS=linux
 WORKDIR /app/backend
+
+# Copy go mod files first for better caching
 COPY backend/go.mod backend/go.sum ./
-RUN go mod download
+
+# Download dependencies with cache mount
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
 COPY backend/ ./
+
 # Copy built frontend into static/
 RUN mkdir -p cmd/server/static
 COPY --from=frontend-builder /app/frontend/dist/ ./cmd/server/static/
+
 # Remove empty directories that Go embed cannot handle
 RUN find ./cmd/server/static -type d -empty -delete
-RUN CGO_ENABLED=0 GOOS=linux go build -o /groceries ./cmd/server
+
+# Build with cache mount and optimized flags
+# Uses native compilation speed with cross-compile output
+# Cache is per-architecture to avoid thrashing
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build,id=go-build-${TARGETARCH} \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -ldflags="-s -w" -o /groceries ./cmd/server
 
 # Stage 3: Production image
 FROM alpine:3.20
