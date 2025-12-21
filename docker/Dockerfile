@@ -4,6 +4,8 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
+# Copy VERSION file so vite can inject version at build time
+COPY VERSION ../VERSION
 RUN npm run build
 
 # Stage 2: Build backend

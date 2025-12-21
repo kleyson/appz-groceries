@@ -1,9 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
-import { ShoppingCart, WifiOff, ServerOff, RefreshCw } from "lucide-react";
+import {
+  ShoppingCart,
+  WifiOff,
+  ServerOff,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { useAuth, useOnlineStatus } from "@/hooks";
-import { Button, Input, Card, CardContent } from "@/components/ui";
+import { Button, Input, Card, CardContent, Modal } from "@/components/ui";
 import { APP_VERSION } from "@/lib/version";
+import { clearAllData } from "@/lib/offline-db";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -31,6 +38,8 @@ function LoginPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [isRetrying, setIsRetrying] = useState(false);
+  const [showClearDataModal, setShowClearDataModal] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
   const handleRetry = async () => {
     setIsRetrying(true);
@@ -38,6 +47,23 @@ function LoginPage() {
       await retryConnection();
     } finally {
       setIsRetrying(false);
+    }
+  };
+
+  const handleClearData = async () => {
+    setIsClearing(true);
+    try {
+      // Clear IndexedDB
+      await clearAllData();
+      // Clear localStorage
+      localStorage.clear();
+      // Clear sessionStorage
+      sessionStorage.clear();
+      // Reload the page to reset all state
+      window.location.reload();
+    } catch (err) {
+      console.error("Failed to clear data:", err);
+      setIsClearing(false);
     }
   };
 
@@ -224,10 +250,49 @@ function LoginPage() {
         </CardContent>
       </Card>
 
-      {/* Version */}
-      <p className="mt-6 text-xs text-slate-400 dark:text-slate-500">
-        v{APP_VERSION}
-      </p>
+      {/* Version and Clear Data */}
+      <div className="mt-6 flex flex-col items-center gap-2">
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          v{APP_VERSION}
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowClearDataModal(true)}
+          className="text-xs text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition-colors flex items-center gap-1"
+        >
+          <Trash2 className="w-3 h-3" />
+          Clear app data
+        </button>
+      </div>
+
+      {/* Clear Data Confirmation Modal */}
+      <Modal
+        isOpen={showClearDataModal}
+        onClose={() => setShowClearDataModal(false)}
+        title="Clear App Data"
+      >
+        <p className="text-slate-600 dark:text-slate-400 mb-6">
+          This will clear all locally cached data including offline items and
+          settings. Use this if the app is stuck or showing incorrect data.
+        </p>
+        <div className="flex gap-3">
+          <Button
+            variant="secondary"
+            className="flex-1"
+            onClick={() => setShowClearDataModal(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            className="flex-1"
+            onClick={handleClearData}
+            isLoading={isClearing}
+          >
+            Clear Data
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

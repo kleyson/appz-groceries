@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
-import { X, Camera, Loader2, SwitchCamera, Flashlight } from "lucide-react";
+import {
+  X,
+  Camera,
+  Loader2,
+  SwitchCamera,
+  Flashlight,
+  Focus,
+} from "lucide-react";
 import { Button, Modal } from "@/components/ui";
 import { lookupBarcodeParallel, type ProductInfo } from "@/lib/barcode-lookup";
 import { cn } from "@/lib/utils";
@@ -8,6 +15,11 @@ import { cn } from "@/lib/utils";
 interface CameraDevice {
   id: string;
   label: string;
+}
+
+interface FocusPoint {
+  x: number;
+  y: number;
 }
 
 interface BarcodeScannerProps {
@@ -29,49 +41,47 @@ export function BarcodeScanner({
   const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
+  const [focusPoint, setFocusPoint] = useState<FocusPoint | null>(null);
+  const [focusSupported, setFocusSupported] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isSwitchingCamera = useRef(false);
+  const focusTimeoutRef = useRef<number | null>(null);
 
-  // Get available cameras only when modal opens (not on mount)
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setCameras([]);
+      setCurrentCameraIndex(0);
+      setError(null);
+      setLastScannedCode(null);
+      setTorchEnabled(false);
+      setTorchSupported(false);
+      setFocusPoint(null);
+      setFocusSupported(false);
+      if (focusTimeoutRef.current) {
+        clearTimeout(focusTimeoutRef.current);
+      }
+    }
+  }, [isOpen]);
+
+  // Get available cameras only when modal opens
   useEffect(() => {
     if (!isOpen) return;
 
     Html5Qrcode.getCameras()
       .then((devices) => {
         if (devices && devices.length > 0) {
-          // Prefer back cameras, sort by label to get main camera first
-          const sortedDevices = devices
-            .filter(
-              (d) =>
-                d.label.toLowerCase().includes("back") ||
-                d.label.toLowerCase().includes("rear") ||
-                d.label.toLowerCase().includes("environment") ||
-                !d.label.toLowerCase().includes("front"),
-            )
-            .sort((a, b) => {
-              // Prefer "main" or "wide" cameras over "ultra" or "telephoto"
-              const aScore = getCameraScore(a.label);
-              const bScore = getCameraScore(b.label);
-              return bScore - aScore;
-            });
-
-          const cameraList = sortedDevices.length > 0 ? sortedDevices : devices;
-          setCameras(cameraList.map((d) => ({ id: d.id, label: d.label })));
+          // Store all cameras for switching, but we'll use facingMode for initial selection
+          setCameras(devices.map((d) => ({ id: d.id, label: d.label })));
         }
       })
-      .catch(console.error);
+      .catch((err) => {
+        console.error("Failed to get cameras:", err);
+        // Still allow scanning with facingMode fallback
+        setCameras([{ id: "environment", label: "Back Camera" }]);
+      });
   }, [isOpen]);
-
-  // Score cameras to prefer main/wide over ultra-wide/telephoto
-  const getCameraScore = (label: string): number => {
-    const lower = label.toLowerCase();
-    if (lower.includes("main") || lower.includes("wide angle")) return 100;
-    if (lower.includes("wide") && !lower.includes("ultra")) return 90;
-    if (lower.includes("back") || lower.includes("rear")) return 80;
-    if (lower.includes("ultra")) return 30; // Ultra-wide is bad for barcodes
-    if (lower.includes("tele") || lower.includes("zoom")) return 40;
-    return 50;
-  };
 
   const stopScanner = useCallback(async () => {
     if (scannerRef.current) {
@@ -88,172 +98,196 @@ export function BarcodeScanner({
     setTorchEnabled(false);
   }, []);
 
-  const startScanner = useCallback(async () => {
-    if (!containerRef.current || cameras.length === 0) return;
+  const startScanner = useCallback(
+    async (cameraIndex: number) => {
+      if (!containerRef.current || cameras.length === 0) return;
 
-    setError(null);
-    setIsScanning(true);
-    setTorchSupported(false);
+      setError(null);
+      setIsScanning(true);
+      setTorchSupported(false);
 
-    try {
-      const scanner = new Html5Qrcode("barcode-scanner", {
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-        ],
-        verbose: false,
-      });
-      scannerRef.current = scanner;
+      try {
+        const scanner = new Html5Qrcode("barcode-scanner", {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+          ],
+          verbose: false,
+        });
+        scannerRef.current = scanner;
 
-      const cameraId = cameras[currentCameraIndex]?.id;
+        // Use facingMode: "environment" for initial back camera, or specific camera ID when switching
+        const cameraConfig =
+          cameraIndex === 0 && cameras[0]?.id === "environment"
+            ? { facingMode: "environment" as const }
+            : cameras[cameraIndex]?.id || {
+                facingMode: "environment" as const,
+              };
 
-      await scanner.start(
-        cameraId || { facingMode: "environment" },
-        {
-          fps: 15,
-          qrbox: { width: 280, height: 160 },
-          aspectRatio: 1.5,
-          // Request higher resolution for better scanning
-          videoConstraints: {
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
+        await scanner.start(
+          cameraConfig,
+          {
+            fps: 15,
+            qrbox: { width: 280, height: 160 },
+            aspectRatio: 1.5,
+            // Request higher resolution for better scanning
+            videoConstraints: {
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+            },
           },
-        },
-        async (decodedText) => {
-          // Avoid duplicate scans
-          if (decodedText === lastScannedCode) return;
-          setLastScannedCode(decodedText);
+          async (decodedText) => {
+            // Avoid duplicate scans
+            if (decodedText === lastScannedCode) return;
+            setLastScannedCode(decodedText);
 
-          // Pause scanning while looking up
-          await scanner.pause(true);
-          setIsLookingUp(true);
+            // Pause scanning while looking up
+            await scanner.pause(true);
+            setIsLookingUp(true);
 
-          try {
-            const product = await lookupBarcodeParallel(decodedText);
-            if (product) {
-              onProductFound(product, decodedText);
-              stopScanner();
-              onClose();
-            } else {
-              setError(`Product not found for barcode: ${decodedText}`);
-              // Resume scanning after a delay
+            try {
+              const product = await lookupBarcodeParallel(decodedText);
+              if (product) {
+                onProductFound(product, decodedText);
+                stopScanner();
+                onClose();
+              } else {
+                setError(`Product not found for barcode: ${decodedText}`);
+                // Resume scanning after a delay
+                setTimeout(() => {
+                  setLastScannedCode(null);
+                  scanner.resume();
+                }, 2000);
+              }
+            } catch (err) {
+              console.error("Lookup error:", err);
+              setError("Failed to look up product");
               setTimeout(() => {
                 setLastScannedCode(null);
                 scanner.resume();
               }, 2000);
+            } finally {
+              setIsLookingUp(false);
             }
-          } catch (err) {
-            console.error("Lookup error:", err);
-            setError("Failed to look up product");
-            setTimeout(() => {
-              setLastScannedCode(null);
-              scanner.resume();
-            }, 2000);
-          } finally {
-            setIsLookingUp(false);
+          },
+          () => {
+            // Ignore scan errors (no barcode detected)
+          },
+        );
+
+        // Check if torch is supported via running track
+        try {
+          const settings = scanner.getRunningTrackSettings() as Record<
+            string,
+            unknown
+          >;
+          if (settings?.torch !== undefined) {
+            setTorchSupported(true);
           }
-        },
-        () => {
-          // Ignore scan errors (no barcode detected)
-        },
-      );
-
-      // Check if torch is supported via running track
-      try {
-        const settings = scanner.getRunningTrackSettings() as Record<
-          string,
-          unknown
-        >;
-        if (settings?.torch !== undefined) {
-          setTorchSupported(true);
+        } catch {
+          // Torch not supported
         }
-      } catch {
-        // Torch not supported
-      }
 
-      // Apply advanced constraints for better focus
-      try {
-        const videoElement = document.querySelector(
-          "#barcode-scanner video",
-        ) as HTMLVideoElement;
-        if (videoElement?.srcObject) {
-          const stream = videoElement.srcObject as MediaStream;
-          const track = stream.getVideoTracks()[0];
-          if (!track) throw new Error("No video track");
+        // Apply advanced constraints for better focus
+        try {
+          const videoElement = document.querySelector(
+            "#barcode-scanner video",
+          ) as HTMLVideoElement;
+          if (videoElement?.srcObject) {
+            const stream = videoElement.srcObject as MediaStream;
+            const track = stream.getVideoTracks()[0];
+            if (!track) throw new Error("No video track");
 
-          const capabilities = track.getCapabilities?.() as
-            | Record<string, unknown>
-            | undefined;
-
-          if (capabilities) {
-            const constraints: Record<string, unknown> = {};
-            const focusModes = capabilities.focusMode as string[] | undefined;
-            const exposureModes = capabilities.exposureMode as
-              | string[]
+            const capabilities = track.getCapabilities?.() as
+              | Record<string, unknown>
               | undefined;
 
-            if (focusModes?.includes("continuous")) {
-              constraints.focusMode = "continuous";
-            }
+            if (capabilities) {
+              const constraints: Record<string, unknown> = {};
+              const focusModes = capabilities.focusMode as string[] | undefined;
+              const exposureModes = capabilities.exposureMode as
+                | string[]
+                | undefined;
 
-            if (exposureModes?.includes("continuous")) {
-              constraints.exposureMode = "continuous";
-            }
+              if (focusModes?.includes("continuous")) {
+                constraints.focusMode = "continuous";
+              }
 
-            if (capabilities.torch) {
-              setTorchSupported(true);
-            }
+              if (exposureModes?.includes("continuous")) {
+                constraints.exposureMode = "continuous";
+              }
 
-            if (Object.keys(constraints).length > 0) {
-              await track.applyConstraints(
-                constraints as MediaTrackConstraints,
-              );
+              if (capabilities.torch) {
+                setTorchSupported(true);
+              }
+
+              // Check if manual focus is supported for tap-to-focus
+              if (
+                focusModes?.includes("manual") ||
+                focusModes?.includes("single-shot")
+              ) {
+                setFocusSupported(true);
+              }
+
+              if (Object.keys(constraints).length > 0) {
+                await track.applyConstraints(
+                  constraints as MediaTrackConstraints,
+                );
+              }
             }
           }
+        } catch (err) {
+          console.warn("Could not apply advanced camera constraints:", err);
         }
       } catch (err) {
-        console.warn("Could not apply advanced camera constraints:", err);
+        console.error("Scanner error:", err);
+        setError(
+          "Failed to start camera. Please ensure camera permissions are granted.",
+        );
+        setIsScanning(false);
       }
-    } catch (err) {
-      console.error("Scanner error:", err);
-      setError(
-        "Failed to start camera. Please ensure camera permissions are granted.",
-      );
-      setIsScanning(false);
-    }
-  }, [
-    cameras,
-    currentCameraIndex,
-    lastScannedCode,
-    onClose,
-    onProductFound,
-    stopScanner,
-  ]);
+    },
+    [cameras, lastScannedCode, onClose, onProductFound, stopScanner],
+  );
 
   // Start scanner when modal opens and cameras are available
   useEffect(() => {
-    if (isOpen && cameras.length > 0 && !isScanning) {
-      startScanner();
+    if (
+      isOpen &&
+      cameras.length > 0 &&
+      !isScanning &&
+      !isSwitchingCamera.current
+    ) {
+      startScanner(currentCameraIndex);
     }
+  }, [isOpen, cameras.length, currentCameraIndex, startScanner, isScanning]);
 
+  // Clean up when modal closes
+  useEffect(() => {
     return () => {
       if (!isOpen) {
         stopScanner();
       }
     };
-  }, [isOpen, cameras.length, startScanner, stopScanner, isScanning]);
+  }, [isOpen, stopScanner]);
 
   const handleSwitchCamera = async () => {
     if (cameras.length <= 1) return;
 
+    isSwitchingCamera.current = true;
     await stopScanner();
     const nextIndex = (currentCameraIndex + 1) % cameras.length;
     setCurrentCameraIndex(nextIndex);
-    // Scanner will restart via useEffect
+
+    // Start scanner with new camera
+    setTimeout(async () => {
+      await startScanner(nextIndex);
+      isSwitchingCamera.current = false;
+    }, 100);
   };
 
   const handleToggleTorch = async () => {
@@ -278,6 +312,62 @@ export function BarcodeScanner({
     }
   };
 
+  const handleTapToFocus = async (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isScanning || !focusSupported) return;
+
+    const videoElement = document.querySelector(
+      "#barcode-scanner video",
+    ) as HTMLVideoElement;
+    if (!videoElement?.srcObject) return;
+
+    // Calculate tap position relative to video
+    const rect = videoElement.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+
+    // Show focus indicator
+    setFocusPoint({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+
+    // Clear previous timeout
+    if (focusTimeoutRef.current) {
+      clearTimeout(focusTimeoutRef.current);
+    }
+
+    // Hide focus indicator after animation
+    focusTimeoutRef.current = window.setTimeout(() => {
+      setFocusPoint(null);
+    }, 1000);
+
+    try {
+      const stream = videoElement.srcObject as MediaStream;
+      const track = stream.getVideoTracks()[0];
+      if (!track) return;
+
+      // Apply focus at the tapped point
+      await track.applyConstraints({
+        advanced: [
+          {
+            focusMode: "manual",
+            pointsOfInterest: [{ x, y }],
+          } as MediaTrackConstraintSet,
+        ],
+      });
+
+      // After focusing, switch back to continuous for ongoing scanning
+      setTimeout(async () => {
+        try {
+          await track.applyConstraints({
+            advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
+          });
+        } catch {
+          // Ignore - continuous might not be supported
+        }
+      }, 500);
+    } catch (err) {
+      console.warn("Could not apply tap-to-focus:", err);
+    }
+  };
+
   const handleClose = () => {
     stopScanner();
     onClose();
@@ -289,10 +379,24 @@ export function BarcodeScanner({
         {/* Scanner viewport */}
         <div
           ref={containerRef}
-          className="relative bg-slate-900 rounded-lg overflow-hidden"
+          className="relative bg-slate-900 rounded-lg overflow-hidden cursor-pointer"
           style={{ minHeight: "300px" }}
+          onClick={handleTapToFocus}
         >
           <div id="barcode-scanner" className="w-full" />
+
+          {/* Tap-to-focus indicator */}
+          {focusPoint && (
+            <div
+              className="absolute pointer-events-none animate-pulse"
+              style={{
+                left: focusPoint.x - 24,
+                top: focusPoint.y - 24,
+              }}
+            >
+              <Focus className="w-12 h-12 text-white drop-shadow-lg" />
+            </div>
+          )}
 
           {/* Camera controls */}
           {isScanning && (
@@ -366,7 +470,8 @@ export function BarcodeScanner({
         {/* Instructions */}
         <p className="text-sm text-slate-500 dark:text-slate-400 text-center">
           Point your camera at a barcode to scan it
-          {cameras.length > 1 && " • Tap camera icon to switch"}
+          {focusSupported && " • Tap to focus"}
+          {cameras.length > 1 && " • Tap icon to switch camera"}
         </p>
 
         {/* Close button */}
