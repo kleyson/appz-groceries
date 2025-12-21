@@ -1,0 +1,14 @@
+#!/bin/sh
+# Pre-commit hook: runs make verify before each commit
+
+# Get the repo root directory
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# Run make verify from the repo root
+cd "$REPO_ROOT" || exit 1
+
+echo "Running pre-commit verification..."
+make verify
+
+# Exit with the same code as make verify
+exit $?

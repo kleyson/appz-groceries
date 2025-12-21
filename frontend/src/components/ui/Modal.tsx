@@ -70,7 +70,7 @@ export function Modal({
             </h2>
             <button
               onClick={onClose}
-              className="p-2 -mr-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-300 dark:hover:bg-slate-800 transition-colors touch-target"
+              className="p-2 -mr-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-300 dark:hover:bg-slate-800 transition-colors touch-target flex items-center justify-center"
               aria-label="Close modal"
             >
               <X className="w-5 h-5" />

@@ -4,3 +4,4 @@ export { useItems } from "./useItems";
 export { useCategories } from "./useCategories";
 export { useDarkMode } from "./useDarkMode";
 export { useUsers } from "./useUsers";
+export { useOnlineStatus } from "./useOnlineStatus";

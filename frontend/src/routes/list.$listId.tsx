@@ -96,7 +96,7 @@ function SortableItem({
           <button
             {...attributes}
             {...listeners}
-            className="p-1 -ml-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-grab active:cursor-grabbing touch-target"
+            className="p-1 -ml-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-grab active:cursor-grabbing touch-target flex items-center justify-center"
             aria-label="Drag to reorder"
           >
             <GripVertical className="w-4 h-4" />
@@ -163,7 +163,7 @@ function SortableItem({
 
           <button
             onClick={onDelete}
-            className="p-2 -mr-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors touch-target"
+            className="p-2 -mr-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors touch-target flex items-center justify-center"
             aria-label={`Delete ${item.name}`}
           >
             <Trash2 className="w-4 h-4" />
@@ -362,7 +362,7 @@ function ListDetailPage() {
       <header className="flex items-center gap-3 mb-6">
         <Link
           to="/"
-          className="p-2 -ml-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors touch-target"
+          className="p-2 -ml-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors touch-target flex items-center justify-center"
           aria-label="Back to lists"
         >
           <ArrowLeft className="w-5 h-5" />
