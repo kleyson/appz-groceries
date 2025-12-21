@@ -4,6 +4,7 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -11,6 +12,35 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/kleyson/groceries/backend/internal/repository"
 )
+
+// Version is set at build time via ldflags or read from VERSION file
+var Version = "dev"
+
+func init() {
+	// Try to read VERSION file at startup
+	if v := readVersionFile(); v != "" {
+		Version = v
+	}
+}
+
+func readVersionFile() string {
+	// Try multiple paths for VERSION file
+	paths := []string{
+		"VERSION",          // Current directory (when running from repo root)
+		"../VERSION",       // When running from backend/
+		"../../VERSION",    // When running from backend/cmd/server/
+		"../../../VERSION", // Additional fallback
+		"/app/VERSION",     // Docker container
+	}
+
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			return strings.TrimSpace(string(data))
+		}
+	}
+	return ""
+}
 
 type Config struct {
 	SecureCookie bool
@@ -59,7 +89,10 @@ func NewRouter(
 	r.Route("/api", func(r chi.Router) {
 		// Health check
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-			JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			JSON(w, http.StatusOK, map[string]string{
+				"status":  "ok",
+				"version": Version,
+			})
 		})
 
 		// Auth routes (public)

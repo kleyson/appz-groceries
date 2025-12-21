@@ -1,4 +1,4 @@
-.PHONY: dev dev-backend dev-frontend build build-backend build-frontend docker clean verify lint format format-check test type-check
+.PHONY: dev dev-backend dev-frontend build build-backend build-frontend docker clean verify lint format format-check test type-check version
 
 # Development
 dev:
@@ -90,3 +90,19 @@ test:
 	cd frontend && npm test || echo "No frontend tests found"
 	@echo "==> Testing backend..."
 	cd backend && go test ./... || echo "No backend tests found"
+
+# Version management
+version:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "❌ Error: VERSION is required. Usage: make version VERSION=\"1.0.0\""; \
+		exit 1; \
+	fi
+	@echo "Updating version to $(VERSION)..."
+	@echo "$(VERSION)" > VERSION
+	@echo "Version updated to $(VERSION)"
+	@echo "Creating git tag v$(VERSION)..."
+	@git add VERSION
+	@git commit -m "Bump version to $(VERSION)" || true
+	@git tag -a "v$(VERSION)" -m "Version $(VERSION)" || (echo "⚠️  Tag v$(VERSION) already exists. Skipping tag creation." && exit 0)
+	@echo "✅ Version updated to $(VERSION) and tag v$(VERSION) created"
+	@echo "Run 'git push && git push --tags' to push changes"

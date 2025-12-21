@@ -3,6 +3,24 @@ import react from '@vitejs/plugin-react'
 import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
+import { readFileSync, existsSync } from 'fs'
+
+// Read version from VERSION file
+function getVersion(): string {
+  const possiblePaths = [
+    path.join(__dirname, '../VERSION'),
+    path.join(__dirname, '../../VERSION'),
+  ]
+
+  for (const versionPath of possiblePaths) {
+    if (existsSync(versionPath)) {
+      return readFileSync(versionPath, 'utf-8').trim()
+    }
+  }
+  return 'dev'
+}
+
+const appVersion = getVersion()
 
 export default defineConfig({
   plugins: [
@@ -79,5 +97,8 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
   },
 })

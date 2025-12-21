@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { ShoppingCart, WifiOff } from "lucide-react";
 import { useAuth, useOnlineStatus } from "@/hooks";
 import { Button, Input, Card, CardContent } from "@/components/ui";
+import { APP_VERSION } from "@/lib/version";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -76,7 +77,7 @@ function LoginPage() {
   const displayError = error || loginError?.message || registerError?.message;
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4">
       <Card className="w-full max-w-sm animate-scale-in">
         <CardContent className="pt-8 pb-6">
           {/* Offline Banner */}
@@ -179,6 +180,11 @@ function LoginPage() {
           </form>
         </CardContent>
       </Card>
+
+      {/* Version */}
+      <p className="mt-6 text-xs text-slate-400 dark:text-slate-500">
+        v{APP_VERSION}
+      </p>
     </div>
   );
 }

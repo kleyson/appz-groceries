@@ -42,6 +42,7 @@ RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /app
 COPY --from=backend-builder /groceries .
+COPY VERSION ./VERSION
 
 # Create data directory
 RUN mkdir -p /data
