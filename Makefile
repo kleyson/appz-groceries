@@ -1,15 +1,31 @@
-.PHONY: dev dev-backend dev-frontend build build-backend build-frontend docker clean verify lint format format-check test type-check version
+.PHONY: dev dev-backend dev-frontend dev-https dev-certs build build-backend build-frontend docker clean verify lint format format-check test type-check version
 
 # Development
 dev:
 	@echo "Starting development servers..."
 	@make -j2 dev-backend dev-frontend
 
+dev-https:
+	@echo "Starting development servers with HTTPS (for phone camera testing)..."
+	@if [ ! -f .dev-certs/cert.pem ] || [ ! -f .dev-certs/key.pem ]; then \
+		echo "⚠️  SSL certificates not found. Generating them now..."; \
+		./scripts/generate-dev-certs.sh; \
+	fi
+	@echo "Starting servers with HTTPS enabled..."
+	@VITE_HTTPS=true make -j2 dev-backend dev-frontend-https
+
 dev-backend:
 	cd backend && go run ./cmd/server
 
 dev-frontend:
 	cd frontend && npm run dev
+
+dev-frontend-https:
+	cd frontend && VITE_HTTPS=true npm run dev
+
+# Generate SSL certificates for local development
+dev-certs:
+	@./scripts/generate-dev-certs.sh
 
 # Build
 build: build-frontend build-backend

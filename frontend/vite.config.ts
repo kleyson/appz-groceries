@@ -22,6 +22,39 @@ function getVersion(): string {
 
 const appVersion = getVersion()
 
+// Get HTTPS configuration for development
+function getHttpsConfig(): boolean | { key: string; cert: string } | undefined {
+  // Check if HTTPS is enabled via environment variable
+  if (process.env.VITE_HTTPS !== 'true') {
+    return false
+  }
+
+  // Look for SSL certificates
+  const certPaths = [
+    path.join(__dirname, '../.dev-certs/cert.pem'),
+    path.join(__dirname, '../../.dev-certs/cert.pem'),
+  ]
+
+  const keyPaths = [
+    path.join(__dirname, '../.dev-certs/key.pem'),
+    path.join(__dirname, '../../.dev-certs/key.pem'),
+  ]
+
+  for (let i = 0; i < certPaths.length; i++) {
+    if (existsSync(certPaths[i]) && existsSync(keyPaths[i])) {
+      return {
+        key: readFileSync(keyPaths[i], 'utf-8'),
+        cert: readFileSync(certPaths[i], 'utf-8'),
+      }
+    }
+  }
+
+  console.warn(
+    '⚠️  VITE_HTTPS=true but certificates not found. Run: make dev-certs',
+  )
+  return false
+}
+
 export default defineConfig({
   plugins: [
     TanStackRouterVite(),
@@ -91,7 +124,8 @@ export default defineConfig({
     },
   },
   server: {
-    host: true,
+    host: true, // Allow access from network
+    https: getHttpsConfig(),
     proxy: {
       '/api': {
         target: 'http://localhost:8080',

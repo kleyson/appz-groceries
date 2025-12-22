@@ -65,22 +65,17 @@ export function BarcodeScanner({
     }
   }, [isOpen]);
 
-  // Get available cameras only when modal opens
+  // Set up camera options when modal opens
+  // We only offer two options: back and front camera (using facingMode)
   useEffect(() => {
     if (!isOpen) return;
 
-    Html5Qrcode.getCameras()
-      .then((devices) => {
-        if (devices && devices.length > 0) {
-          // Store all cameras for switching, but we'll use facingMode for initial selection
-          setCameras(devices.map((d) => ({ id: d.id, label: d.label })));
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to get cameras:", err);
-        // Still allow scanning with facingMode fallback
-        setCameras([{ id: "environment", label: "Back Camera" }]);
-      });
+    // Simple two-camera setup using facingMode
+    // This works better than device IDs on phones with multiple back cameras
+    setCameras([
+      { id: "environment", label: "Back Camera" },
+      { id: "user", label: "Front Camera" },
+    ]);
   }, [isOpen]);
 
   const stopScanner = useCallback(async () => {
@@ -120,22 +115,17 @@ export function BarcodeScanner({
         });
         scannerRef.current = scanner;
 
-        // Use facingMode: "environment" for initial back camera, or specific camera ID when switching
-        const cameraConfig =
-          cameraIndex === 0 && cameras[0]?.id === "environment"
-            ? { facingMode: "environment" as const }
-            : cameras[cameraIndex]?.id || {
-                facingMode: "environment" as const,
-              };
+        // Use the camera id directly as facingMode ("environment" or "user")
+        const facingMode = cameras[cameraIndex]?.id as "environment" | "user";
 
         await scanner.start(
-          cameraConfig,
+          { facingMode: { exact: facingMode } },
           {
             fps: 15,
             qrbox: { width: 280, height: 160 },
             aspectRatio: 1.5,
-            // Request higher resolution for better scanning
             videoConstraints: {
+              facingMode: { ideal: facingMode },
               width: { ideal: 1920 },
               height: { ideal: 1080 },
             },
