@@ -1,7 +1,7 @@
 {
-  "name": "Groceries",
+  "name": "Appz Groceries",
   "short_name": "Groceries",
-  "description": "Manage your grocery lists with ease",
+  "description": "Appz Groceries - Manage your grocery lists with ease",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
