@@ -275,7 +275,8 @@ export function BarcodeScanner({
     };
   }, [isOpen, stopScanner]);
 
-  const handleSwitchCamera = async () => {
+  const handleSwitchCamera = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (cameras.length <= 1) return;
 
     isSwitchingCamera.current = true;
@@ -290,7 +291,8 @@ export function BarcodeScanner({
     }, 100);
   };
 
-  const handleToggleTorch = async () => {
+  const handleToggleTorch = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!scannerRef.current || !torchSupported) return;
 
     try {
