@@ -16,7 +16,7 @@ registerRoute(
   /^\/api\/.*$/,
   new NetworkFirst({
     cacheName: "api-cache",
-    networkTimeoutSeconds: 10,
+    networkTimeoutSeconds: 30,
     plugins: [
       new ExpirationPlugin({
         maxEntries: 100,
@@ -172,8 +172,8 @@ self.addEventListener("message", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
-      await checkVersionAndClearIfNeeded();
       await self.clients.claim();
+      await checkVersionAndClearIfNeeded();
     })(),
   );
 });
