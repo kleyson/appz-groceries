@@ -1,4 +1,33 @@
-.PHONY: dev dev-backend dev-frontend dev-https dev-certs build build-backend build-frontend docker clean verify lint format format-check test type-check version
+.PHONY: dev dev-backend dev-frontend dev-https dev-certs build build-backend build-frontend docker clean verify lint format format-check test type-check version bump-patch bump-minor bump-major help
+
+# Help
+help:
+	@echo "Available commands:"
+	@echo ""
+	@echo "Development:"
+	@echo "  make dev              - Start backend and frontend servers"
+	@echo "  make dev-https        - Start with HTTPS (for camera testing)"
+	@echo "  make dev-certs        - Generate SSL certificates"
+	@echo ""
+	@echo "Build:"
+	@echo "  make build            - Build both frontend and backend"
+	@echo "  make build-frontend   - Build frontend only"
+	@echo "  make build-backend    - Build backend only"
+	@echo ""
+	@echo "Docker:"
+	@echo "  make docker           - Build Docker image"
+	@echo "  make docker-run       - Run with docker-compose"
+	@echo ""
+	@echo "Version:"
+	@echo "  make version VERSION=\"1.0.0\"  - Set specific version"
+	@echo "  make bump-patch       - Bump patch version (0.9.0 -> 0.9.1)"
+	@echo "  make bump-minor       - Bump minor version (0.9.0 -> 0.10.0)"
+	@echo "  make bump-major       - Bump major version (0.9.0 -> 1.0.0)"
+	@echo ""
+	@echo "Utilities:"
+	@echo "  make clean            - Clean build artifacts"
+	@echo "  make verify           - Run all checks (lint, format, test)"
+	@echo "  make help             - Show this help message"
 
 # Development
 dev:
@@ -126,3 +155,33 @@ version:
 	@echo "Pushing tags..."
 	@git push --tags || (echo "⚠️  Failed to push tags. Make sure you have a remote configured." && exit 1)
 	@echo "✅ Version $(VERSION) pushed and tag v$(VERSION) pushed"
+
+bump-patch:
+	@CURRENT=$$(cat VERSION); \
+	MAJOR=$$(echo $$CURRENT | cut -d. -f1); \
+	MINOR=$$(echo $$CURRENT | cut -d. -f2); \
+	PATCH=$$(echo $$CURRENT | cut -d. -f3); \
+	NEW="$$MAJOR.$$MINOR.$$((PATCH + 1))"; \
+	echo "Bumping patch: $$CURRENT -> $$NEW"; \
+	echo $$NEW > VERSION; \
+	git add VERSION && git commit -m "Bump patch: $$CURRENT -> $$NEW" && git tag -a "v$$NEW" -m "Version $$NEW" && git push && git push --tags; \
+	echo "✅ Version bumped to $$NEW and pushed"
+
+bump-minor:
+	@CURRENT=$$(cat VERSION); \
+	MAJOR=$$(echo $$CURRENT | cut -d. -f1); \
+	MINOR=$$(echo $$CURRENT | cut -d. -f2); \
+	NEW="$$MAJOR.$$((MINOR + 1)).0"; \
+	echo "Bumping minor: $$CURRENT -> $$NEW"; \
+	echo $$NEW > VERSION; \
+	git add VERSION && git commit -m "Bump minor: $$CURRENT -> $$NEW" && git tag -a "v$$NEW" -m "Version $$NEW" && git push && git push --tags; \
+	echo "✅ Version bumped to $$NEW and pushed"
+
+bump-major:
+	@CURRENT=$$(cat VERSION); \
+	MAJOR=$$(echo $$CURRENT | cut -d. -f1); \
+	NEW="$$((MAJOR + 1)).0.0"; \
+	echo "Bumping major: $$CURRENT -> $$NEW"; \
+	echo $$NEW > VERSION; \
+	git add VERSION && git commit -m "Bump major: $$CURRENT -> $$NEW" && git tag -a "v$$NEW" -m "Version $$NEW" && git push && git push --tags; \
+	echo "✅ Version bumped to $$NEW and pushed"
